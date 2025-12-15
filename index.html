@@ -77,4 +77,438 @@
 
         <div class="p-4 max-w-[1800px] mx-auto">
             <div v-show="currentTab === 'settings'" class="space-y-4 no-print">
-                <div class="bg-white p-4 rounded shadow border-l-4 border-purple-500 overflow-x-auto"><h3 class="font-bold text-lg mb-2 text-purple-900">📊 01. 節數設定矩陣</h3><div class="max-h-[60vh] overflow-auto"><table class="w-full text-sm border-collapse matrix-table"><thead><tr><th class="z-20 left-0 bg-gray-200">年級 \ 科目</th><th v-for="(sub, idx) in subjects" :key="idx" class="min-w-[60px]"><div class="flex flex-col items-center"><span class="font-bold" :class="getSubjectColor(sub.zh)">{{sub.zh}}</span><span class="text-[9px] text-gray-500 bg-gray-100 px-1 rounded">{{sub.alias}}</span></div></th><th class="min-w-[50px] bg-gray-800 text-white sticky right-0 z-20">總計</th></tr></thead><tbody><tr v-for="g in 6" :key="g"><td class="font-bold bg-gray-50 sticky left-0 z-10">{{ g }} 年級</td><td v-for="sub in subjects" :key="sub.zh"><input t
+                <div class="bg-white p-4 rounded shadow border-l-4 border-purple-500 overflow-x-auto"><h3 class="font-bold text-lg mb-2 text-purple-900">📊 01. 節數設定矩陣</h3><div class="max-h-[60vh] overflow-auto"><table class="w-full text-sm border-collapse matrix-table"><thead><tr><th class="z-20 left-0 bg-gray-200">年級 \ 科目</th><th v-for="(sub, idx) in subjects" :key="idx" class="min-w-[60px]"><div class="flex flex-col items-center"><span class="font-bold" :class="getSubjectColor(sub.zh)">{{sub.zh}}</span><span class="text-[9px] text-gray-500 bg-gray-100 px-1 rounded">{{sub.alias}}</span></div></th><th class="min-w-[50px] bg-gray-800 text-white sticky right-0 z-20">總計</th></tr></thead><tbody><tr v-for="g in 6" :key="g"><td class="font-bold bg-gray-50 sticky left-0 z-10">{{ g }} 年級</td><td v-for="sub in subjects" :key="sub.zh"><input type="number" v-model.number="getGradeSubjectConfig(g)[sub.zh]" class="matrix-input" :class="{'has-value': getGradeSubjectConfig(g)[sub.zh] > 0}" min="0"></td><td class="font-bold text-center bg-gray-100 border-l-2 border-gray-400 sticky right-0 z-10 text-blue-800">{{ sumGradePeriods(g) }}</td></tr></tbody></table></div></div>
+                <div class="bg-white p-4 rounded shadow"><h3 class="font-bold">班級數設定</h3><div class="flex gap-4 mt-2"><div v-for="g in 6" :key="g" class="flex items-center gap-1 bg-gray-50 p-1 rounded border"><span>{{ g }}年:</span><input type="number" v-model="gradeConfig[g]" class="w-10 text-center border rounded">班</div><button @click="regenerateTeachers" class="btn btn-red text-xs ml-auto">重置導師名單</button></div></div>
+            </div>
+
+            <div v-show="currentTab === 'teachers'" class="bg-white p-4 rounded shadow no-print">
+                <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg">👩‍🏫 02. 教師資料</h3><div class="flex gap-2"><button @click="exportTeacherCSV" class="btn btn-purple shadow text-xs">📥 下載 CSV</button><label class="btn btn-orange shadow text-xs cursor-pointer">📤 匯入 CSV<input type="file" @change="importTeacherCSV" class="hidden" accept=".csv"></label><button @click="addTeacher" class="btn btn-blue">+ 新增</button></div></div>
+                <div class="h-[70vh] overflow-y-auto">
+                    <table class="w-full text-sm text-left border-collapse"><thead class="bg-gray-100 sticky top-0 z-10"><tr><th class="p-2 border">姓名</th><th class="p-2 border">身分</th><th class="p-2 border w-32 bg-yellow-50">負責班級</th><th class="p-2 border w-10 text-center">學年<br>主任</th><th class="p-2 border">職稱備註</th><th class="p-2 border w-16 bg-blue-50">基本</th><th class="p-2 border w-24 bg-red-100">減(-)</th><th class="p-2 border w-24 bg-green-100">超(+)</th><th class="p-2 border w-16 font-bold">應授</th><th class="p-2 border w-32">已配 / 應授</th><th class="p-2 border w-12">刪</th></tr></thead>
+                    <tbody><tr v-for="(t, idx) in teachers" :key="t.id" class="border-b hover:bg-gray-50"><td class="p-1"><input v-model="t.name" class="w-full border rounded p-1 font-bold" :class="getRoleColor(t.role)"></td><td class="p-1"><select v-model="t.role" class="w-full border rounded p-1" :class="getRoleColor(t.role)"><option>導師</option><option>科任</option><option>組長</option><option>主任</option></select></td><td class="p-1 bg-yellow-50"><select v-if="t.role === '導師'" v-model="t.classId" class="w-full border rounded p-1 font-bold text-blue-800 text-xs"><option value="">未定</option><option v-for="c in classList" :value="c.id">{{ c.name }}</option></select><span v-else class="text-gray-400 text-xs text-center block">-</span></td><td class="p-1 text-center"><input type="checkbox" v-model="t.isGradeDirector" class="w-4 h-4"></td><td class="p-1"><input v-model="t.title_note" class="w-full border rounded p-1 text-xs"></td><td class="p-1 bg-blue-50"><input type="number" v-model.number="t.baseLoad" class="w-full text-center border rounded p-1"></td><td class="p-1 bg-red-100"><input type="number" v-model.number="t.reduction" max="0" class="w-full text-center border rounded p-1 text-red-600 font-bold"></td><td class="p-1 bg-green-100"><input type="number" v-model.number="t.overtime" min="0" class="w-full text-center border rounded p-1 text-green-600 font-bold"></td><td class="p-1 text-center font-bold text-lg">{{ calculateTargetLoad(t) }}</td>
+                    <td class="p-2 text-xs text-center font-bold" :class="{'bg-green-500 text-white': getTeacherLoad(t.id) === calculateTargetLoad(t), 'bg-red-100 text-red-600': getTeacherLoad(t.id) > calculateTargetLoad(t)}"><span v-if="getTeacherLoad(t.id) === calculateTargetLoad(t)">✔ {{ getTeacherLoad(t.id) }}/{{ calculateTargetLoad(t) }}</span><div v-else><span>{{ getTeacherLoad(t.id) }} / {{ calculateTargetLoad(t) }}</span><div class="w-full bg-gray-300 h-1.5 rounded mt-1 overflow-hidden"><div class="h-full" :style="{width: Math.min((getTeacherLoad(t.id)/calculateTargetLoad(t))*100, 100)+'%', background: getTeacherLoad(t.id)>calculateTargetLoad(t)?'#dc2626':'#16a34a'}"></div></div></div></td><td class="p-1 text-center"><button @click="teachers.splice(idx, 1)" class="text-red-500 font-bold">x</button></td></tr></tbody></table>
+                </div>
+            </div>
+
+            <div v-show="currentTab === 'assignments'" class="space-y-4 no-print">
+                 <div class="flex justify-center gap-4 mb-2"><button @click="assignMode='class'" class="btn" :class="assignMode=='class'?'btn-blue':'btn-gray'">🏫 班級視角</button><button @click="assignMode='teacher'" class="btn" :class="assignMode=='teacher'?'btn-blue':'btn-gray'">👨‍🏫 教師視角</button><button @click="assignMode='matrix'" class="btn" :class="assignMode=='matrix'?'btn-blue':'btn-gray'">📊 總量配課</button></div>
+                 <div v-if="assignMode === 'class'" class="space-y-6"><div v-for="g in 6" :key="g" class="bg-white p-3 rounded shadow"><div class="font-bold text-lg border-b pb-1 mb-2">{{ g }} 年級</div><div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr><th class="text-left w-12 sticky top-0 bg-gray-50 p-1 border-b">班級</th><th v-for="s in getSubjectsForGrade(g)" class="min-w-[60px] sticky top-0 bg-gray-50 p-1 text-center border-b" :class="getSubjectColor(s.zh)">{{s.zh}} <span class="block text-gray-500">({{getPeriodCount(g,s.zh)}})</span></th></tr></thead><tbody><tr v-for="cls in getClassListByGrade(g)" :key="cls.id" class="border-b hover:bg-gray-50"><td class="font-bold py-1 p-1">{{cls.name}}</td><td v-for="s in getSubjectsForGrade(g)" class="p-1 border-l text-center relative"><select :value="getAssignment(cls.id, s.zh).primary" @change="setAssignment(cls.id, s.zh, 'primary', $event.target.value)" class="compact-select" :class="getRoleColor(getTeacherRole(getAssignment(cls.id, s.zh).primary))"><option :value="getHomeroomTeacherId(cls.id)">導師</option><option v-for="t in specialistTeachers" :value="t.id">{{t.name}}</option></select></td></tr></tbody></table></div></div></div>
+                 <div v-if="assignMode === 'teacher'" class="bg-white p-6 rounded shadow border-t-4 border-indigo-500"><div class="mb-4"><h4 class="font-bold mb-2">1. 選擇老師</h4><div class="space-y-2"><div v-for="role in ['主任', '組長', '科任']" :key="role" class="flex gap-2"><div class="w-10 text-xs font-bold pt-2">{{role}}</div><div class="flex flex-wrap gap-1"><button v-for="t in getTeachersByRoleGroup(role)" :key="t.id" @click="batchTeacherId = t.id" class="select-btn" :class="{'active': batchTeacherId === t.id}">{{ t.name }} <span class="text-[10px] ml-1 opacity-70">({{ getTeacherLoad(t.id) }}/{{ calculateTargetLoad(t) }})</span></button></div></div></div></div><div class="mb-6 border-t pt-4"><h4 class="font-bold mb-2">2. 選擇科目</h4><div class="flex flex-wrap gap-1"><button v-for="s in subjects" :key="s.zh" @click="batchSubject = s.zh" class="select-btn" :class="[batchSubject === s.zh ? 'active' : '', getSubjectColor(s.zh)]">{{ s.zh }}</button></div></div><div v-if="batchTeacherId && batchSubject" class="border-t pt-4 animate-fade-in"><div class="flex justify-between items-center mb-2"><h4 class="font-bold text-blue-800 text-lg">3. 分配 {{ getTeacherName(batchTeacherId) }} 的 「{{ batchSubject }}」</h4></div><div class="bg-blue-50 p-4 rounded mb-4" v-if="getAssignedClassesForTeacher(batchTeacherId, batchSubject).length > 0"><div class="font-bold text-sm text-blue-900 mb-2">已分配 (微調):</div><div class="flex flex-wrap gap-3"><div v-for="item in getAssignedClassesForTeacher(batchTeacherId, batchSubject)" :key="item.cid" class="bg-white border border-blue-200 rounded px-3 py-1 flex items-center gap-2 shadow-sm"><span class="font-bold text-blue-800">{{ item.name }}</span><div class="flex items-center gap-1 bg-gray-100 rounded px-1"><button @click="adjustPeriodOverride(item.cid, batchSubject, -1)" class="w-5 h-5 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-xs">-</button><span class="text-sm font-mono w-4 text-center">{{ item.periods }}</span><button @click="adjustPeriodOverride(item.cid, batchSubject, 1)" class="w-5 h-5 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-xs">+</button></div><button @click="toggleTeacherClass(item.cid, parseInt(item.cid.charAt(0)))" class="ml-2 text-red-400 hover:text-red-600 font-bold">x</button></div></div></div><div v-for="g in 6" :key="g" class="flex items-center gap-4 py-2 border-b border-dashed"><div class="w-12 font-bold text-sm">{{g}}年</div><div class="flex-1 flex flex-wrap gap-2"><div v-for="cls in getClassListByGrade(g)" :key="cls.id" @click="toggleTeacherClass(cls.id, g)" class="class-btn w-16" :class="{'active': getAssignment(cls.id, batchSubject).primary == batchTeacherId,'disabled': getPeriodCount(g, batchSubject) === 0}"><div class="font-bold text-xs">{{ cls.name }}</div></div></div></div></div></div>
+                 <div v-if="assignMode === 'matrix'" class="bg-white p-4 rounded shadow border-t-4 border-green-500"><div class="assign-matrix-wrapper"><table class="assign-matrix-table w-full text-xs"><thead><tr><th class="sticky-corner p-2 min-w-[100px] z-30 font-bold text-left">教師 \ 科目</th><th v-for="s in subjects" :key="s.zh" class="sticky-header p-2 min-w-[70px] text-center" :class="getSubjectColor(s.zh)">{{s.zh}}</th></tr></thead><tbody><tr v-for="t in specialistTeachers" :key="t.id"><td class="sticky-col p-2 font-bold border-b text-gray-700" :class="getRoleColor(t.role)">{{ t.name }}</td><td v-for="s in subjects" :key="s.zh" class="assign-cell border-b border-r text-center" :class="{'active': activeMatrixCell?.tid === t.id && activeMatrixCell?.subj === s.zh}" @click="activeMatrixCell = {tid: t.id, subj: s.zh}"><input type="number" v-model.number="getTeacherTarget(t.id)[s.zh]" class="target-input" placeholder="-" @click.stop="activeMatrixCell = {tid: t.id, subj: s.zh}"><span class="actual-count" :class="getRealAssignedCount(t.id, s.zh) == (getTeacherTarget(t.id)[s.zh]||0) ? 'match-ok' : 'match-fail'">(已配: {{ getRealAssignedCount(t.id, s.zh) }})</span></td></tr></tbody></table></div><div v-if="activeMatrixCell" class="bg-gray-100 p-4 rounded border-2 border-blue-300 shadow-lg sticky bottom-0 z-40 animate-fade-in"><div class="flex justify-between items-center mb-2"><h4 class="font-bold text-lg text-blue-900">分配：<span class="text-indigo-600">{{ getTeacherName(activeMatrixCell.tid) }}</span> 的 <span :class="getSubjectColor(activeMatrixCell.subj)">{{ activeMatrixCell.subj }}</span></h4><button @click="activeMatrixCell = null" class="text-gray-500 hover:text-red-500 font-bold">✕ 關閉</button></div><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"><div v-for="g in 6" :key="g" class="bg-white p-2 rounded border"><div class="font-bold text-gray-500 text-xs mb-1">{{g}}年級 (預設{{getPeriodCount(g, activeMatrixCell.subj)}}節)</div><div class="flex flex-wrap gap-2"><div v-for="cls in getClassListByGrade(g)" :key="cls.id" @click="toggleTeacherClass(cls.id, g, activeMatrixCell.subj, activeMatrixCell.tid)" class="class-btn" :class="{'active': getAssignment(cls.id, activeMatrixCell.subj).primary == activeMatrixCell.tid,'disabled': getPeriodCount(g, activeMatrixCell.subj) === 0}"><span>{{cls.name}}</span><div v-if="getAssignment(cls.id, activeMatrixCell.subj).primary == activeMatrixCell.tid" class="flex gap-1 ml-1" @click.stop><button @click="adjustPeriodOverride(cls.id, activeMatrixCell.subj, -1)" class="mini-btn">-</button><span class="text-white font-mono text-[10px]">{{ getEffectivePeriod(cls.id, activeMatrixCell.subj) }}</span><button @click="adjustPeriodOverride(cls.id, activeMatrixCell.subj, 1)" class="mini-btn">+</button></div></div></div></div></div></div></div>
+            </div>
+
+            <div v-show="currentTab === 'special'" class="max-w-[1000px] mx-auto no-print"><div class="bg-white p-6 rounded shadow border-l-4 border-orange-500"><h3 class="font-bold text-xl text-orange-600 border-b pb-2 mb-4">🛡️ 04. 特殊排課規則</h3><div class="flex gap-4 mb-4"><button class="btn btn-orange" @click="addSpecialRule">新增規則</button><button class="btn btn-blue" @click="refreshSpecialStatus">刷新偵測</button></div><div class="flex gap-2 mb-4 items-end bg-orange-50 p-3 rounded"><div class="flex-1"><label class="block font-bold text-xs mb-1">原因</label><input v-model="newRule.name" class="w-full border p-1 rounded text-sm"></div><div class="flex-1"><label class="block font-bold text-xs mb-1">班級 (空格分開)</label><input v-model="newRule.classes" class="w-full border p-1 rounded text-sm"></div><div class="w-24"><label class="block font-bold text-xs mb-1">星期</label><select v-model="newRule.day" class="w-full border p-1 rounded text-sm"><option v-for="d in days" :value="d">{{d}}</option></select></div><div class="w-24"><label class="block font-bold text-xs mb-1">節次</label><select v-model="newRule.period" class="w-full border p-1 rounded text-sm"><option v-for="p in periods" :value="p.idx">{{p.idx}}</option></select></div></div><div class="space-y-2"><div v-for="(rule, idx) in specialRules" :key="idx" class="bg-white border rounded p-3 flex justify-between items-center shadow-sm"><div><div class="font-bold text-gray-800">{{rule.name}} <span class="text-xs bg-gray-200 px-2 rounded">{{rule.day}}{{rule.period}}</span></div><div class="text-xs text-gray-500">{{ rule.classes.join(', ') }}</div></div><button @click="specialRules.splice(idx,1);saveData()" class="btn btn-red text-xs">刪除</button></div></div></div></div>
+            <div v-show="currentTab === 'priority'" class="max-w-[1000px] mx-auto no-print"><div class="bg-white p-6 rounded shadow border-l-4 border-indigo-500"><h3 class="font-bold text-xl text-indigo-600 border-b pb-2 mb-4">⚡ 05. 科任權重</h3><div class="grid grid-cols-3 gap-4"><div v-for="t in specialistTeachers" :key="t.id" class="flex items-center gap-2 bg-gray-50 p-2 rounded border"><span class="font-bold w-24">{{t.name}}</span><input type="number" v-model.number="t.priority" class="w-16 border rounded text-center"></div></div></div></div>
+            
+            <div v-show="currentTab === 'class_schedule'" class="no-print"><div class="bg-white p-3 rounded shadow flex flex-col gap-3 mb-4"><div class="flex gap-2 items-center"><span class="font-bold">班級排課：</span><select v-model="selectedClass" class="border p-1 rounded font-bold w-32"><option v-for="c in classList" :value="c.id">{{c.name}}</option></select></div></div><div class="bg-white p-4 rounded shadow overflow-x-auto"><div class="editor-grid"><div class="editor-cell bg-gray-200 font-bold">節</div><div v-for="d in days" class="editor-cell bg-gray-200 font-bold">{{ d }}</div><template v-for="p in periods"><div class="editor-cell bg-gray-100 font-bold text-xs">{{ p.idx }}</div><div v-for="d in days" class="editor-cell border hover:bg-blue-50" :class="{'cell-sys-blocked': isSystemBlocked(selectedClass, d, p.idx)}" @click="handleClassCellClick(d, p.idx)"><div v-if="getCellDisplay(d, p.idx)" class="w-full h-full flex flex-col justify-center z-10"><span v-if="getCellDisplay(d, p.idx).type=='block'" class="text-red-500 font-bold text-2xl">✕</span><div v-else><div class="font-bold" :class="getSubjectColor(getCellDisplay(d, p.idx).subject)">{{ getCellDisplay(d, p.idx).subject }}</div><div class="text-xs">{{ getCellDisplay(d, p.idx).subInfo }}</div></div></div></div></template></div></div></div>
+
+            <div v-show="currentTab === 'teacher_schedule'" class="no-print">
+                 <div class="bg-white p-3 rounded shadow flex flex-col gap-3 mb-4">
+                    <div class="flex gap-2 border-b pb-2 items-center"><span class="font-bold">科任排課：</span><select v-model="selectedTeacherId" class="border p-1 rounded font-bold w-40"><option v-for="t in specialistTeachers" :value="t.id">{{t.name}}</option></select><div class="ml-auto flex gap-2 items-center"><button @click="clearAllSchedule" class="btn btn-red">🗑️ 清空</button><div class="flex items-center gap-2 bg-gray-100 rounded p-1 border"><div class="w-3 h-3 rounded-full" :class="isAssignmentReady ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'"></div><button @click="runGlobalAutoFill" class="btn btn-purple shadow" :class="{'btn-disabled': !isAssignmentReady}" :disabled="!isAssignmentReady">⚡ 一鍵排入科任課</button></div><span class="text-xs text-gray-500">待排: {{totalAssignedSpecialistSlots}}節</span></div></div>
+                    <div class="space-y-2"><div v-for="role in ['主任', '組長', '科任']" :key="role" class="flex items-start gap-2 border-b border-dashed pb-1"><div class="font-bold text-gray-500 w-12 text-center text-sm pt-1">{{role}}</div><div class="flex flex-wrap gap-1"><button v-for="t in getTeachersByRoleGroup(role)" :key="t.id" @click="selectedTeacherId = t.id" class="select-btn" :class="{'active': selectedTeacherId === t.id}">{{ t.name }}</button></div></div></div>
+                 </div>
+                <div class="bg-white p-4 rounded shadow overflow-x-auto"><h2 class="text-center font-bold text-xl mb-2">{{ getTeacherName(selectedTeacherId) }} 課表</h2><div class="editor-grid"><div class="editor-cell bg-gray-200 font-bold">節</div><div v-for="d in days" class="editor-cell bg-gray-200 font-bold">{{ d }}</div><template v-for="p in periods"><div class="editor-cell bg-gray-100 font-bold text-xs">{{ p.idx }}</div><div v-for="d in days" class="editor-cell border hover:bg-blue-50" :class="{'cell-blocked': isBlocked(d, p.idx)}" @click="handleTeacherCellClick(d, p.idx)"><div v-if="getCellDisplay(d, p.idx)" class="w-full h-full flex flex-col justify-center z-10"><span v-if="getCellDisplay(d, p.idx).type=='block'" class="text-red-500 font-bold text-2xl">✕</span><div v-else><div class="font-bold">{{ getCellDisplay(d, p.idx).subject }}</div><div class="text-xs">{{ getCellDisplay(d, p.idx).subInfo }}</div></div></div></div></template></div></div>
+            </div>
+
+            <div v-show="currentTab === 'rules'" class="max-w-[1000px] mx-auto no-print"><div class="bg-white p-6 rounded shadow border-l-4 border-teal-500"><div class="flex justify-between items-center mb-4 border-b pb-2"><h3 class="font-bold text-xl text-teal-600">🚦 08. 排課規則檢查儀表板</h3><button @click="runRuleValidation" class="btn btn-green shadow">🔄 執行檢查</button></div><div class="grid gap-3"><div v-for="r in systemRules" :key="r.id" class="bg-white border rounded p-4 rule-card" :class="r.status==='fail'?'border-red-400 bg-red-50':(r.status==='pass'?'border-green-400 bg-green-50':'')"><div class="flex items-center justify-between"><div class="flex items-center gap-3"><div class="status-dot w-4 h-4" :class="{'dot-gray':r.status=='pending','dot-green':r.status=='pass','dot-red':r.status=='fail'}"></div><div><div class="font-bold text-lg">{{r.name}}</div><div class="text-sm text-gray-500">{{r.desc}}</div></div></div><div class="text-2xl font-bold" :class="r.status=='fail'?'text-red-600':(r.status=='pass'?'text-green-600':'text-gray-300')">{{ r.status === 'fail' ? r.logs.length : (r.status==='pass'?'OK':'--') }}</div></div><div v-if="r.status==='fail'" class="mt-3 bg-white p-2 rounded text-xs text-red-600 border border-red-200 max-h-32 overflow-y-auto"><div v-for="(log, li) in r.logs" :key="li">• {{log}}</div></div></div></div></div></div>
+            <div v-show="currentTab === 'stats'" class="max-w-[1200px] mx-auto no-print"><div class="bg-white p-6 rounded shadow"><h3 class="font-bold text-xl mb-4 border-b pb-2">📊 09. 全校教師節數統計</h3><div class="flex gap-2 mb-4"><button @click="statsFilter='all'" class="btn">全部</button><button @click="statsFilter='reduced'" class="btn">減授</button><button @click="statsFilter='overtime'" class="btn">超鐘</button></div><div class="grid grid-cols-3 gap-4"><div v-for="t in filteredStatsTeachers" :key="t.id" class="p-3 border rounded bg-gray-50 flex justify-between items-center"><div>{{ t.name }}</div><div>{{ getTeacherLoad(t.id) }}/{{ calculateTargetLoad(t) }}</div></div></div></div></div>
+            <div v-show="currentTab === 'query'" class="max-w-[1200px] mx-auto"><div class="bg-white p-4 rounded shadow mb-6 no-print flex gap-4 items-end border-b-4 border-black"><div><label class="block font-bold text-sm">對象</label><select v-model="queryMode" class="border p-2 rounded"><option value="class_single">班級</option><option value="teacher_single">教師</option></select></div><div v-if="queryMode.includes('class')"><select v-model="queryTarget" class="border p-2 rounded"><option v-for="c in classList" :value="c.id">{{c.name}}</option></select></div><div v-if="queryMode.includes('teacher')"><select v-model="queryTarget" class="border p-2 rounded"><option v-for="t in teachers" :value="t.id">{{t.name}}</option></select></div><button @click="window.print()" class="btn btn-blue">列印</button></div><div class="print-area bg-white p-8 shadow-lg print:shadow-none print:p-0"><div v-for="page in printPages" class="mb-10 print-page-break"><div class="text-center font-bold text-2xl mb-2">課表預覽</div><table class="simple-print-table"><thead><tr><th>節</th><th v-for="d in days">{{d}}</th></tr></thead><tbody><tr v-for="p in periods"><td>{{p.idx}}</td><td v-for="d in days"><div v-if="page.data[d]?.[p.idx]">{{page.data[d][p.idx].subject}}</div></td></tr></tbody></table></div></div></div>
+        </div>
+        
+        <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 no-print">
+            <div class="bg-white p-6 rounded w-80 shadow-lg">
+                <h3 class="font-bold mb-4">{{ modalData.mode === 'teacher_view' ? '科任排課設定' : '班級排課設定' }}</h3>
+                
+                <div v-if="modalData.mode === 'teacher_view'">
+                     <div class="mb-4">
+                         <div class="text-xs text-gray-500 mb-1">目前狀態</div>
+                         <div v-if="modalData.occupiedClassId" class="bg-blue-100 p-2 rounded text-blue-800 font-bold border border-blue-300">
+                             {{ modalData.occupiedClassId }} {{ modalData.occupiedSubject }}
+                         </div>
+                         <div v-else-if="modalData.isBlocked" class="bg-red-100 p-2 rounded text-red-800 font-bold border border-red-300">
+                             ⛔ 不排
+                         </div>
+                         <div v-else class="bg-gray-100 p-2 rounded text-gray-600 border">
+                             (空)
+                         </div>
+                     </div>
+
+                     <div class="border-t pt-2 mt-2">
+                         <label class="block text-xs font-bold mb-2">排入課程 (顯示剩餘節數)</label>
+                         <select v-model="modalData.selectedTask" class="w-full border p-2 mb-2 rounded font-bold" size="5">
+                             <option v-for="task in modalData.availableTasks" :value="task" class="py-1">
+                                 {{ task.name }} {{ task.subj }} (剩 {{ task.remaining }} 節)
+                             </option>
+                         </select>
+                         <div class="flex gap-2">
+                            <button @click="saveTeacherScheduleCell('course')" class="flex-1 btn btn-blue" :disabled="!modalData.selectedTask" :class="{'btn-disabled':!modalData.selectedTask}">✅ 排入</button>
+                            <button @click="saveTeacherScheduleCell('block')" class="flex-1 btn btn-red">⛔ 不排</button>
+                         </div>
+                         <div class="mt-2 text-right">
+                             <button v-if="modalData.occupiedClassId || modalData.isBlocked" @click="saveTeacherScheduleCell('clear')" class="text-sm text-red-500 underline">清除設定</button>
+                         </div>
+                     </div>
+                     <div class="mt-4 text-center">
+                        <button @click="showModal=false" class="btn btn-gray">關閉</button>
+                     </div>
+                </div>
+
+                <div v-else>
+                    <div class="flex gap-2 mb-4"><button @click="modalData.type='course'" class="btn btn-blue">課程</button><button @click="modalData.type='block'" class="btn btn-red">⛔ 不排(X)</button></div>
+                    <div v-if="modalData.type=='course'"><label class="block text-xs font-bold mb-1">科目</label><select v-model="modalData.subject" class="w-full border p-2 mb-2 rounded"><option v-for="s in subjects" :value="s.zh">{{s.zh}}</option></select><label class="block text-xs font-bold mb-1">授課教師</label><select v-model="modalData.teacherId" class="w-full border p-2 mb-2 rounded font-bold text-blue-700" :class="getRoleColor(getTeacherRole(modalData.teacherId))"><option :value="modalData.defaultT1">{{getTeacherName(modalData.defaultT1)}} (預設)</option><option v-if="modalData.defaultT2" :value="modalData.defaultT2">{{getTeacherName(modalData.defaultT2)}} (共授)</option><option disabled>-----------</option><option v-for="t in teachers" :value="t.id">{{t.name}}</option></select></div><div class="flex justify-end gap-2 mt-4"><button @click="deleteCell" class="text-red-500 font-bold px-2">清除</button><button @click="saveCell" class="btn btn-blue">確定</button><button @click="showModal=false" class="btn btn-gray">取消</button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, watch } = Vue;
+        createApp({
+            setup() {
+                // 1. DATA REFS
+                const currentTab = ref('settings');
+                const viewMode = ref('class');
+                const assignMode = ref('class');
+                const days = ['一','二','三','四','五'];
+                const periods = [{idx:1},{idx:2},{idx:3},{idx:4},{idx:5},{idx:6},{idx:7}];
+                const tabs = [
+                    {id:'settings',name:'01.基礎設定'},{id:'teachers',name:'02.教師管理'},{id:'assignments',name:'03.配課設定'},
+                    {id:'special',name:'04.🛡️ 特殊排課'},{id:'priority',name:'05.⚡ 科任權重'}, 
+                    {id:'class_schedule',name:'06.班級預排課'}, {id:'teacher_schedule',name:'07.科任排課'},
+                    {id:'rules',name:'08.🚦 規則檢查'}, {id:'stats',name:'09.📊 統計資料'},{id:'query',name:'10.查詢列印'}
+                ];
+                const subjects = ref([
+                    {zh:'國語',alias:'部定'}, {zh:'數學',alias:'部定'}, {zh:'英語',alias:'部定'}, {zh:'社會',alias:'部定'}, {zh:'自然',alias:'部定'}, 
+                    {zh:'生活',alias:'部定'}, {zh:'體育',alias:'部定'}, {zh:'綜合',alias:'部定'}, {zh:'藝文',alias:'部定'}, {zh:'健康',alias:'部定'}, {zh:'本土',alias:'部定'},
+                    {zh:'走過時代邁向國際',alias:'彈性(合)'}, {zh:'國際+閱讀',alias:'彈性(新)'}, {zh:'閱讀培力',alias:'彈性'}, 
+                    {zh:'世界之窗',alias:'彈性'}, {zh:'新莊E學院',alias:'彈性(資)'}, {zh:'新莊萬花筒',alias:'彈性'}, {zh:'進擊的學吧',alias:'彈性'}
+                ]);
+                const gradeConfig = ref({1:6,2:6,3:7,4:9,5:8,6:8});
+                const defaultMatrix = { 1: {'國語':6}, 2: {'國語':6}, 3: {'國語':5}, 4: {'國語':5}, 5: {'國語':5}, 6: {'國語':5} };
+                const gradeSubjectConfig = ref(JSON.parse(JSON.stringify(defaultMatrix)));
+                const teachers = ref([]);
+                const scheduleData = ref({});
+                const assignments = ref({}); 
+                const specialRules = ref([]);
+                const newRule = ref({name:'', classes:'', day:'二', period:3});
+                const statsFilter = ref('all');
+                const batchSubject = ref('國語');
+                const batchTeacherId = ref(null);
+                const teacherTargets = ref({});
+                const activeMatrixCell = ref(null);
+                const selectedClass=ref('101');
+                const selectedTeacherId=ref(1);
+                const queryMode=ref('class_single');
+                const queryTarget=ref('101');
+                const showModal=ref(false);
+                const modalData=ref({});
+                const systemRules = ref([
+                    { id: 1, name: '體育課不連堂', desc: '同一天同一班不應有兩節體育', status: 'pending', logs: [] },
+                    { id: 2, name: '體育避開4,5節', desc: '體育課不排在第4,5節', status: 'pending', logs: [] },
+                    { id: 3, name: '自然連堂', desc: '自然課需有一次連堂(3節中)', status: 'pending', logs: [] },
+                    { id: 4, name: '主任週一排課', desc: '學年主任班級週一第1節需為科任', status: 'pending', logs: [] },
+                    { id: 5, name: '高年級科任下午', desc: '5,6年級需有一天下午全科任', status: 'pending', logs: [] }
+                ]);
+
+                // 2. HELPER FUNCTIONS
+                function initTeachers() {
+                    let list = [], tid=1;
+                    for(let i=1;i<=4;i++) list.push({id:tid++,name:`主任${i}`,role:'主任',classId:'',title_note:`教務主任${i}`,baseLoad:1,reduction:0,overtime:0,priority:10});
+                    for(let i=1;i<=9;i++) list.push({id:tid++,name:`組長${i}`,role:'組長',classId:'',title_note:`教學組長${i}`,baseLoad:11,reduction:0,overtime:0,priority:10});
+                    for(let i=1;i<=13;i++) list.push({id:tid++,name:`科任${i}`,role:'科任',classId:'',title_note:'專長',baseLoad:20,reduction:0,overtime:0,priority:10});
+                    for(let g=1;g<=6;g++) {
+                        for(let c=1;c<=gradeConfig.value[g];c++) {
+                            const clsId = `${g}${c.toString().padStart(2,'0')}`;
+                            list.push({id:tid++,name:`${clsId}導師`,role:'導師',classId:clsId,title_note:'',baseLoad:16,reduction:0,overtime:0,priority:99, isGradeDirector:false});
+                        }
+                    }
+                    return list;
+                }
+
+                function getGradeSubjectConfig(g) { if(!gradeSubjectConfig.value[g])gradeSubjectConfig.value[g]={};return gradeSubjectConfig.value[g]; }
+                function getTeacherName(id) { return teachers.value.find(t=>t.id==id)?.name||''; }
+                function getTeacherRole(id) { return teachers.value.find(t=>t.id==id)?.role||''; }
+                function getClassName(cid) { return cid; } 
+                function getHomeroomTeacherId(cid) { return teachers.value.find(t => t.classId === cid)?.id || 999; }
+                function getRoleColor(role) { if(role==='主任') return 'text-role-director'; if(role==='組長') return 'text-role-chief'; if(role==='科任') return 'text-role-teacher'; return 'text-role-homeroom'; }
+                function getSubjectColor(subj) { if(!subj) return 'sub-color-default'; if(subj.includes('英語')||subj.includes('世界之窗')) return 'sub-color-eng'; if(subj.includes('社會')) return 'sub-color-soc'; if(subj.includes('自然')) return 'sub-color-sci'; if(subj.includes('生活')) return 'sub-color-life'; if(subj.includes('體育')) return 'sub-color-pe'; if(subj.includes('藝文')) return 'sub-color-art'; if(subj.includes('健康')) return 'sub-color-health'; if(subj.includes('本土')) return 'sub-color-native'; if(subj.includes('資訊')||subj.includes('E學院')) return 'sub-color-it'; return 'sub-color-default'; }
+
+                function getAssignment(cid, subj) {
+                    if(!assignments.value[cid]) assignments.value[cid] = {};
+                    if(!assignments.value[cid][subj]) assignments.value[cid][subj] = { primary: getHomeroomTeacherId(cid), secondary: null, override: null };
+                    return assignments.value[cid][subj];
+                }
+                function setAssignment(cid, subj, type, val) { getAssignment(cid, subj); assignments.value[cid][subj][type] = val ? parseInt(val) : null; saveData(); }
+                function addSecondary(cid, subj) { setAssignment(cid, subj, 'secondary', specialistTeachers.value[0].id); }
+                function removeSecondary(cid, subj) { setAssignment(cid, subj, 'secondary', null); }
+                function getPeriodCount(g,s) { return getGradeSubjectConfig(g)[s]||0; }
+                function getTeacherTarget(tid) { if(!teacherTargets.value[tid]) teacherTargets.value[tid] = {}; return teacherTargets.value[tid]; }
+                function getRealAssignedCount(tid, subj) { let count = 0; for(let cid in assignments.value) { const assign = assignments.value[cid][subj]; if(assign && assign.primary === tid) { const grade = parseInt(cid.charAt(0)); count += (assign.override !== null ? assign.override : getPeriodCount(grade, subj)); } } return count; }
+                function toggleTeacherClass(cid, grade, subj, tid) { if(!tid) tid = batchTeacherId.value; if(!subj) subj = batchSubject.value; const assign = getAssignment(cid, subj); if(assign.primary == tid) setAssignment(cid, subj, 'primary', getHomeroomTeacherId(cid)); else setAssignment(cid, subj, 'primary', tid); }
+                function getEffectivePeriod(cid, subj) { const assign = getAssignment(cid, subj); const grade = parseInt(cid.charAt(0)); return assign.override !== null ? assign.override : getPeriodCount(grade, subj); }
+                function sumGradePeriods(g) { let sum=0; const c=getGradeSubjectConfig(g); for(let s in c) sum+=c[s]; return sum; }
+                function calculateTargetLoad(t) { return (t.baseLoad||0) + (t.reduction||0) + (t.overtime||0); }
+                function getTeacherLoad(tid) { let count = 0; for(let cid in assignments.value) { const grade = parseInt(cid.charAt(0)); for(let subj in assignments.value[cid]) { const assign = assignments.value[cid][subj]; if(assign.primary == tid) count += (assign.override !== null ? assign.override : getPeriodCount(grade, subj)); } } return count; }
+                function adjustPeriodOverride(cid, subj, delta) { const assign = getAssignment(cid, subj); const grade = parseInt(cid.charAt(0)); let current = assign.override !== null ? assign.override : getPeriodCount(grade, subj); let newVal = current + delta; if(newVal < 0) newVal = 0; assignments.value[cid][subj].override = newVal; saveData(); }
+                function getAssignedClassesForTeacher(tid, subj) { let list = []; for(let cid in assignments.value) { if(assignments.value[cid][subj]?.primary == tid) { const grade = parseInt(cid.charAt(0)); let p = assignments.value[cid][subj].override !== null ? assignments.value[cid][subj].override : getPeriodCount(grade, subj); list.push({cid: cid, name: cid, periods: p}); } } return list; }
+                function checkAndSetAssignment(cid, subj, tid, grade) { setAssignment(cid, subj, 'primary', tid); }
+                
+                function getAllAssignmentsForTeacher(tid) {
+                    let list = [];
+                    for(let cid in assignments.value) {
+                        for(let subj in assignments.value[cid]) {
+                            const assign = assignments.value[cid][subj];
+                            if(assign.primary == tid) {
+                                const grade = parseInt(cid.charAt(0));
+                                let target = assign.override !== null ? assign.override : getPeriodCount(grade, subj);
+                                
+                                // Calculate already placed count
+                                let placed = 0;
+                                for(let d in scheduleData.value[cid]) {
+                                    for(let p in scheduleData.value[cid][d]) {
+                                        const cell = scheduleData.value[cid][d][p];
+                                        if(cell.subject == subj && cell.teacherId == tid) placed++;
+                                    }
+                                }
+                                
+                                if(target > placed) {
+                                    list.push({cid: cid, name: getClassName(cid), subj: subj, remaining: target - placed, total: target});
+                                }
+                            }
+                        }
+                    }
+                    return list;
+                }
+                function removeTeacherFromClass(cid, subj) { setAssignment(cid, subj, 'primary', getHomeroomTeacherId(cid)); }
+
+                function exportTeacherCSV() { let csvContent = "\uFEFF姓名,身分,負責班級,職稱備註,基本節數,減課,超鐘點\n"; teachers.value.forEach(t => { csvContent += `${t.name},${t.role},${t.classId||''},${t.title_note||''},${t.baseLoad},${t.reduction},${t.overtime}\n`; }); const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })); link.download = "teacher_data.csv"; link.click(); }
+                function importTeacherCSV(e) { const file = e.target.files[0]; if(!file || !confirm("覆蓋?")) return; const reader = new FileReader(); reader.onload = (ev) => { const lines = ev.target.result.split('\n'); const newTeachers = []; let tid = 1; for(let i=1; i<lines.length; i++) { const cols = lines[i].split(','); if(cols.length < 2) continue; newTeachers.push({ id: tid++, name: cols[0].trim(), role: cols[1].trim(), classId: cols[2]?cols[2].trim():'', title_note: cols[3]?cols[3].trim():'', baseLoad: parseInt(cols[4])||0, reduction: parseInt(cols[5])||0, overtime: parseInt(cols[6])||0 }); } teachers.value = newTeachers; alert("匯入成功！"); }; reader.readAsText(file); }
+                function addSpecialRule() { if(!newRule.value.classes) return alert("請輸入班級"); specialRules.value.push({ name: newRule.value.name||'特殊', classes:newRule.value.classes.replace(/,/g,' ').split(' ').filter(c=>c), day:newRule.value.day, period:newRule.value.period }); saveData(); }
+                function editSpecialRule(idx) { const r = specialRules.value[idx]; newRule.value = { name: r.name, classes: r.classes.join(' '), day: r.day, period: r.period }; specialRules.value.splice(idx, 1); }
+                function refreshSpecialStatus() { alert("偵測已刷新"); }
+                function checkRuleStatus(rule) { for(let cid of rule.classes) { const cell = scheduleData.value[cid]?.[rule.day]?.[rule.period]; if(cell && cell.teacherId && cell.teacherId != getHomeroomTeacherId(cid)) return false; } return true; }
+                function handleClassCellClick(d,p) { if(isSystemBlocked(selectedClass.value, d, p)) return; const cid=selectedClass.value, c=scheduleData.value[cid]?.[d]?.[p], defS=c?.subject||'國語', assign=getAssignment(cid,defS); modalData.value={d,p,type:c?.type||'course',subject:defS,teacherId:c?.teacherId||assign.primary,defaultT1:assign.primary,defaultT2:assign.secondary}; showModal.value=true; }
+                
+                // NEW: Teacher Cell Click Handler
+                function handleTeacherCellClick(d,p) { 
+                    const t=teachers.value.find(x=>x.id==selectedTeacherId.value);
+                    const isBlocked = t.constraints?.includes(`${d}-${p}`);
+                    
+                    // Check if occupied by a class
+                    let occupiedClassId = null;
+                    let occupiedSubject = null;
+                    for (let cid in scheduleData.value) {
+                        const cell = scheduleData.value[cid]?.[d]?.[p];
+                        if (cell && cell.teacherId == selectedTeacherId.value) {
+                            occupiedClassId = cid;
+                            occupiedSubject = cell.subject;
+                            break;
+                        }
+                    }
+
+                    modalData.value = {
+                        mode: 'teacher_view',
+                        d: d,
+                        p: p,
+                        teacherId: selectedTeacherId.value,
+                        isBlocked: isBlocked,
+                        occupiedClassId: occupiedClassId,
+                        occupiedSubject: occupiedSubject,
+                        availableTasks: getAllAssignmentsForTeacher(selectedTeacherId.value),
+                        selectedTask: null
+                    };
+                    showModal.value = true;
+                }
+
+                function getCellDisplay(d,p) { if(currentTab.value==='class_schedule') { const c=scheduleData.value[selectedClass.value]?.[d]?.[p]; return c?(c.type=='block'?{type:'block'}:{type:'course',subject:c.subject,subInfo:getTeacherName(c.teacherId),tid:c.teacherId}):null; } else { const tid=selectedTeacherId.value; if(teachers.value.find(x=>x.id==tid)?.constraints?.includes(`${d}-${p}`)) return {type:'block'}; for(let cid in scheduleData.value){const c=scheduleData.value[cid]?.[d]?.[p];if(c&&c.teacherId==tid)return{type:'course',subject:c.subject,subInfo:classList.value.find(x=>x.id==cid)?.name};} } }
+                function isBlocked(d,p) { if(currentTab.value!=='teacher_schedule') return false; return teachers.value.find(x=>x.id==selectedTeacherId.value)?.constraints?.includes(`${d}-${p}`); }
+                function isSpecialBlockedDisplay(day, period) { return (currentTab.value === 'class_schedule') ? isSpecialBlocked(selectedClass.value, day, period) : false; }
+                function isSpecialBlocked(cid, day, period) { return specialRules.value.some(r => r.day == day && r.period == period && r.classes.includes(cid)); }
+                function isSystemBlocked(cid, day, period) { if (day === '三' && period >= 5) return true; if (!cid) return false; const g = parseInt(cid.charAt(0)); if (g <= 2) { if ((day === '一' || day === '四' || day === '五') && period >= 5) return true; } if (g >= 3 && g <= 4) { if (day === '五' && period >= 5) return true; } return false; }
+                function isSystemBlockedForTeacher(day, period) { if (day === '三' && period >= 5) return true; return false; }
+                
+                function saveCell() { const{d,p,type,subject,teacherId}=modalData.value, cid=selectedClass.value; if(!scheduleData.value[cid])scheduleData.value[cid]={};if(!scheduleData.value[cid][d])scheduleData.value[cid][d]={};scheduleData.value[cid][d][p]={type,subject,teacherId}; showModal.value=false; saveData(); }
+                
+                // NEW: Save from Teacher View
+                function saveTeacherScheduleCell(action) {
+                    const { d, p, teacherId, selectedTask, occupiedClassId } = modalData.value;
+                    const t = teachers.value.find(x => x.id == teacherId);
+                    const k = `${d}-${p}`;
+
+                    // Always clean up existing block constraint
+                    if (t.constraints?.includes(k)) t.constraints = t.constraints.filter(x => x != k);
+                    
+                    // Clean up existing class if present
+                    if (occupiedClassId) {
+                         delete scheduleData.value[occupiedClassId][d][p];
+                    }
+
+                    if (action === 'block') {
+                        if (!t.constraints) t.constraints = [];
+                        t.constraints.push(k);
+                    } else if (action === 'course' && selectedTask) {
+                        const cid = selectedTask.cid;
+                        if (!scheduleData.value[cid]) scheduleData.value[cid] = {};
+                        if (!scheduleData.value[cid][d]) scheduleData.value[cid][d] = {};
+                        scheduleData.value[cid][d][p] = { type: 'course', subject: selectedTask.subj, teacherId: teacherId };
+                    }
+                    
+                    showModal.value = false;
+                    saveData();
+                }
+
+                function deleteCell() { if(scheduleData.value[selectedClass.value]?.[modalData.value.d]) delete scheduleData.value[selectedClass.value][modalData.value.d][modalData.value.p]; showModal.value=false; saveData(); }
+                function clearAllSchedule() { if(confirm("確定清空？")) scheduleData.value={}; saveData(); }
+                function saveData(alertUser=false) { localStorage.setItem('schoolV46',JSON.stringify({teachers:teachers.value,gradeConfig:gradeConfig.value,gradeSubjectConfig:gradeSubjectConfig.value,schedule:scheduleData.value,assignments:assignments.value,specialRules:specialRules.value, teacherTargets:teacherTargets.value})); if(alertUser) alert(`✅ 系統已儲存！`); }
+                function loadData() { try{const d=JSON.parse(localStorage.getItem('schoolV46'));if(d){teachers.value=d.teachers;gradeConfig.value=d.gradeConfig;gradeSubjectConfig.value=d.gradeSubjectConfig||defaultMatrix;scheduleData.value=d.schedule;assignments.value=d.assignments;specialRules.value=d.specialRules||[]; teacherTargets.value=d.teacherTargets||{};}else teachers.value=initTeachers();}catch(e){teachers.value=initTeachers();} }
+                function resetData() { if(confirm("重置?"))localStorage.removeItem('schoolV46')||location.reload(); }
+                function exportData() { const a=document.createElement('a');a.href="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(localStorage.getItem('schoolV46')));a.download="backup_v46.json";a.click(); }
+                function importData(e) { const r=new FileReader();r.onload=(ev)=>{localStorage.setItem('schoolV46',JSON.parse(ev.target.result));loadData();};r.readAsText(e.target.files[0]); }
+                function regenerateTeachers() { if(confirm("重置導師?"))teachers.value=initTeachers(); }
+                function addTeacher() { teachers.value.push({id:Date.now(),name:'新師',role:'科任',classId:'',baseLoad:20,priority:10}); }
+
+                function runRuleValidation() {
+                    systemRules.value.forEach(r => { r.status='pass'; r.logs=[]; });
+                    for(let cid in scheduleData.value) {
+                        for(let d of days) {
+                            let peCount = 0;
+                            for(let p of periods) { if(scheduleData.value[cid][d]?.[p.idx]?.subject === '體育') peCount++; }
+                            if(peCount > 1) { systemRules.value[0].status = 'fail'; systemRules.value[0].logs.push(`${cid} 週${d} 有 ${peCount} 節體育`); }
+                        }
+                        for(let d of days) for(let p of [4,5]) { if(scheduleData.value[cid][d]?.[p]?.subject === '體育') { systemRules.value[1].status = 'fail'; systemRules.value[1].logs.push(`${cid} 週${d}第${p}節 是體育`); } }
+                        const htId = getHomeroomTeacherId(cid);
+                        const ht = teachers.value.find(t=>t.id==htId);
+                        if(ht && ht.isGradeDirector) {
+                            const cell = scheduleData.value[cid]['一']?.[1];
+                            if(!cell || cell.teacherId == htId) { systemRules.value[3].status = 'fail'; systemRules.value[3].logs.push(`${cid} (主任班) 週一第1節是導師課`); }
+                        }
+                    }
+                }
+
+                function tryPlace(cid, day, period, subj, tid) {
+                    if(scheduleData.value[cid]?.[day]?.[period]) return false;
+                    const t = teachers.value.find(x=>x.id==tid);
+                    if(t?.constraints?.includes(`${day}-${period}`)) return false;
+                    if(isSpecialBlocked(cid, day, period)) return false;
+                    if(isSystemBlocked(cid, day, period)) return false;
+                    if(subj === '體育' && (period === 4 || period === 5)) return false;
+                    for(let other in scheduleData.value) if(scheduleData.value[other]?.[day]?.[period]?.teacherId == tid) return false;
+                    if(!scheduleData.value[cid]) scheduleData.value[cid]={}; if(!scheduleData.value[cid][day]) scheduleData.value[cid][day]={};
+                    scheduleData.value[cid][day][period] = { type:'course', subject:subj, teacherId:tid };
+                    return true;
+                }
+
+                function runGlobalAutoFill() {
+                    if(!confirm("確定執行「全校科任自動排課」？")) return;
+                    let tasks = [];
+                    for(let cid in assignments.value) {
+                         const htId = getHomeroomTeacherId(cid);
+                         const grade = parseInt(cid.charAt(0));
+                         for(let subj in assignments.value[cid]) {
+                             const assign = assignments.value[cid][subj];
+                             if(assign.primary && assign.primary != htId) {
+                                 let pCount = assign.override !== null ? assign.override : getPeriodCount(grade, subj);
+                                 if(pCount > 0) {
+                                     tasks.push({cid: cid, grade: grade, subj: subj, tid: assign.primary, count: pCount});
+                                 }
+                             }
+                         }
+                    }
+                    tasks.sort((a, b) => {
+                        const tA = teachers.value.find(t => t.id === a.tid); const tB = teachers.value.find(t => t.id === b.tid);
+                        const pA = tA ? (tA.priority || 10) : 10; const pB = tB ? (tB.priority || 10) : 10;
+                        if (pA !== pB) return pA - pB;
+                        return b.count - a.count;
+                    });
+                    let placedCount = 0;
+                    tasks.forEach(task => {
+                        let needed = task.count;
+                        for(let d of days) for(let p of periods) { 
+                            const cell = scheduleData.value[task.cid]?.[d]?.[p.idx];
+                            if(cell && cell.subject == task.subj && cell.teacherId == task.tid) needed--; 
+                        }
+                        for(let d of days) { if(needed <= 0) break; for(let p of periods){ if(needed <= 0) break; if(tryPlace(task.cid, d, p.idx, task.subj, task.tid)){ needed--; placedCount++; } } }
+                    });
+                    saveData();
+                    alert(`✅ 排課完成！共排入 ${placedCount} 節科任課。`);
+                }
+                function runAutoFill() { runGlobalAutoFill(); }
+
+                // --- 3. COMPUTED PROPERTIES ---
+                const classList = computed(() => {
+                    let list=[]; for(let g=1;g<=6;g++) for(let c=1;c<=gradeConfig.value[g];c++) list.push({id:`${g}${c.toString().padStart(2,'0')}`,name:`${g}${c.toString().padStart(2,'0')}`,grade:g}); return list;
+                });
+                const specialistTeachers = computed(() => teachers.value.filter(t=>t.role!=='導師'));
+                const filteredStatsTeachers = computed(() => teachers.value.filter(t => statsFilter.value === 'all' ? true : (statsFilter.value === 'reduced' ? (t.reduction||0)<0 : (t.overtime||0)>0)));
+
+                const totalAssignedSpecialistSlots = computed(() => {
+                    let count = 0;
+                    for(let cid in assignments.value) {
+                         const htId = getHomeroomTeacherId(cid);
+                         const grade = parseInt(cid.charAt(0));
+                         for(let subj in assignments.value[cid]) {
+                             const assign = assignments.value[cid][subj];
+                             if(assign.primary && assign.primary != htId) {
+                                 let pCount = assign.override !== null ? assign.override : getPeriodCount(grade, subj);
+                                 if(pCount > 0) {
+                                     let placed = 0;
+                                     for(let d in scheduleData.value[cid]) for(let p in scheduleData.value[cid][d]) {
+                                         if(scheduleData.value[cid][d][p].subject == subj && scheduleData.value[cid][d][p].teacherId == assign.primary) placed++;
+                                     }
+                                     if(placed < pCount) count += (pCount - placed);
+                                 }
+                             }
+                         }
+                    }
+                    return count;
+                });
+                const isAssignmentReady = computed(() => totalAssignedSpecialistSlots.value > 0);
+
+                const printPages = computed(() => {
+                    let res=[], gen=(tid,isT)=>{
+                        let data={}, tObj=isT?teachers.value.find(t=>t.id==tid):null, titleNote=isT?(tObj.title_note?`(${tObj.title_note})`:''):'', teacherName=isT?tObj.name:getTeacherName(getHomeroomTeacherId(tid)), typeInfo=isT?tObj.role:classList.value.find(c=>c.id==tid)?.name;
+                        days.forEach(d=>{data[d]={};periods.forEach(p=>{
+                            if(isT){if(tObj.constraints?.includes(`${d}-${p.idx}`))data[d][p.idx]={type:'block'};else{for(let cid in scheduleData.value){let c=scheduleData.value[cid]?.[d]?.[p.idx];if(c&&c.teacherId==tid)data[d][p.idx]={type:'course',subject:c.subject,subEn:subjects.value.find(s=>s.zh==c.subject)?.en,className:classList.value.find(x=>x.id==cid)?.name};}}}
+                            else{let c=scheduleData.value[tid]?.[d]?.[p.idx];if(c)data[d][p.idx]={type:c.type,subject:c.subject,subEn:subjects.value.find(s=>s.zh==c.subject)?.en,teacher:getTeacherName(c.teacherId)};}
+                        });}); return {typeInfo,teacherName,titleNote,data,isTeacherView:isT};
+                    };
+                    if(queryMode.value=='teacher_single') { if(queryTarget.value) res.push(gen(queryTarget.value,true)); }
+                    else if(queryMode.value=='class_single') { if(queryTarget.value) res.push(gen(queryTarget.value,false)); }
+                    return res;
+                });
+
+                // --- 4. HELPER FUNCTIONS ---
+                function getSubjectsForGrade(g) {
+                    return subjects.value;
+                }
+
+                function getClassListByGrade(g) {
+                    return classList.value.filter(c => c.grade == g);
+                }
+
+                function getTeachersByRoleGroup(role) {
+                    return teachers.value.filter(t => t.role === role);
+                }
+                // -----------------------------------------------------------
+
+                watch(()=>modalData.value.subject, (n)=>{ if(modalData.value.type=='course') { const a=getAssignment(selectedClass.value,n); modalData.value.defaultT1=a.primary; modalData.value.defaultT2=a.secondary; modalData.value.teacherId=a.primary; } });
+
+                onMounted(loadData);
+                return {
+                    currentTab, tabs, viewMode, assignMode, days, periods, subjects, teachers, gradeConfig, scheduleData, specialRules, newRule,
+                    selectedClass, selectedTeacherId, queryMode, queryTarget, showModal, modalData,
+                    classList, specialistTeachers, printPages, statsFilter, filteredStatsTeachers, batchSubject, batchTeacherId,
+                    teacherTargets, activeMatrixCell, getTeacherTarget, getRealAssignedCount, getEffectivePeriod,
+                    getGradeSubjectConfig, getSubjectsForGrade, getClassListByGrade, getPeriodCount, sumGradePeriods,
+                    getAssignment, setAssignment, addSecondary, removeSecondary, getHomeroomTeacherId, getTeacherLoad, calculateTargetLoad, getTeacherRole,
+                    getCellDisplay, handleClassCellClick, handleTeacherCellClick, saveCell, saveTeacherScheduleCell, deleteCell, isBlocked, isSpecialBlockedDisplay, checkRuleStatus, addSpecialRule, editSpecialRule, refreshSpecialStatus,
+                    runGlobalAutoFill, runAutoFill, clearAllSchedule, getTeacherName, getClassName, getRoleColor, getSubjectColor, checkAndSetAssignment, toggleTeacherClass, getAssignedClassesForTeacher, adjustPeriodOverride,
+                    getAllAssignmentsForTeacher, removeTeacherFromClass, getTeachersByRoleGroup, exportTeacherCSV, importTeacherCSV,
+                    isSystemBlocked, totalAssignedSpecialistSlots, isAssignmentReady, systemRules, runRuleValidation, isSystemBlockedForTeacher,
+                    saveData, exportData, importData, resetData, regenerateTeachers, addTeacher
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
