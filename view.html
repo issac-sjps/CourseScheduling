@@ -197,8 +197,7 @@ const db = firebase.firestore();
 let appData   = null;   // 從 Firestore 拉回的資料
 let queryMode = 'class'; // 'class' | 'teacher'
 
-// DAYS, PERIOD_IDXS, PERIOD_TIMES are defined in data.js
-const PERIODS = PERIOD_IDXS; // alias for local use
+// DAYS, PERIOD_IDXS, PERIOD_IDXS, PERIOD_TIMES are all defined in data.js
 
 // ── 載入 Firestore 資料 ──────────────────────
 async function loadData() {
@@ -339,7 +338,7 @@ function renderClassSchedule(cid, card) {
 
     card.innerHTML = buildTable(title, subtitle, () => {
         let html = '';
-        PERIODS.forEach(p => {
+        PERIOD_IDXS.forEach(p => {
             html += `<tr>`;
             html += `<td class="period-col">
                         <span class="period-label">${p}</span>
@@ -382,7 +381,7 @@ function renderTeacherSchedule(tid, card) {
 
     card.innerHTML = buildTable(title, subtitle, () => {
         let html = '';
-        PERIODS.forEach(p => {
+        PERIOD_IDXS.forEach(p => {
             const k = `${''}-${p}`; // used for constraints check below
             html += `<tr>`;
             html += `<td class="period-col">
