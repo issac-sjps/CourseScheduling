@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>課表查詢 — 新莊國小</title>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="data.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: #f0f4f8;
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        .site-header {
+            background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+            color: white;
+            padding: 20px 24px 16px;
+            box-shadow: 0 4px 20px rgba(37,99,235,0.3);
+        }
+        .site-header h1 { font-size: 1.5rem; font-weight: 900; letter-spacing: 2px; }
+        .site-header p  { font-size: 0.85rem; opacity: 0.75; margin-top: 2px; }
+        .last-updated   { font-size: 0.75rem; opacity: 0.6; margin-top: 4px; }
+
+        /* ── Main layout ── */
+        .main { max-width: 960px; margin: 0 auto; padding: 20px 16px 60px; }
+
+        /* ── Query panel ── */
+        .query-panel {
+            background: white;
+            border-radius: 16px;
+            padding: 20px 24px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+        .query-group { display: flex; flex-direction: column; gap: 4px; }
+        .query-group label { font-size: 0.75rem; font-weight: 700; color: #64748b; letter-spacing: 1px; }
+        .tab-group { display: flex; background: #f1f5f9; border-radius: 8px; padding: 3px; gap: 2px; }
+        .tab-btn {
+            padding: 6px 16px; border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+            border: none; cursor: pointer; transition: all 0.2s; color: #64748b; background: transparent;
+        }
+        .tab-btn.active { background: white; color: #2563eb; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+        .query-select {
+            border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 8px 12px;
+            font-size: 0.95rem; font-family: inherit; min-width: 140px;
+            color: #1e293b; font-weight: 600; background: white; outline: none;
+            transition: border-color 0.2s;
+        }
+        .query-select:focus { border-color: #2563eb; }
+
+        /* ── Schedule card ── */
+        .schedule-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 16px 24px 14px;
+            background: linear-gradient(135deg, #1e3a5f, #1d4ed8);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .card-title     { font-size: 1.25rem; font-weight: 900; letter-spacing: 1px; }
+        .card-subtitle  { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
+        .print-btn {
+            background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+            color: white; border-radius: 8px; padding: 6px 14px; font-size: 0.85rem;
+            cursor: pointer; font-family: inherit; font-weight: 600; transition: all 0.2s;
+        }
+        .print-btn:hover { background: rgba(255,255,255,0.25); }
+
+        /* ── Schedule table ── */
+        .schedule-table { width: 100%; border-collapse: collapse; }
+        .schedule-table th {
+            background: #f8fafc; color: #475569; font-weight: 700; font-size: 0.85rem;
+            padding: 10px 6px; text-align: center; border-bottom: 2px solid #e2e8f0;
+            border-right: 1px solid #f1f5f9;
+        }
+        .schedule-table th.period-th {
+            background: #f1f5f9; color: #94a3b8; width: 52px; font-size: 0.75rem;
+            border-right: 2px solid #e2e8f0;
+        }
+        .schedule-table td { border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9; padding: 0; vertical-align: middle; }
+        .schedule-table tr:last-child td { border-bottom: none; }
+        .schedule-table td.period-col {
+            background: #f8fafc; border-right: 2px solid #e2e8f0; text-align: center; padding: 4px;
+        }
+        .period-label { font-size: 13px; font-weight: 700; color: #334155; display: block; }
+        .period-time  { font-size: 10px; color: #94a3b8; display: block; }
+
+        .cell-wrap {
+            min-height: 64px; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; padding: 6px 4px;
+            text-align: center; transition: background 0.15s;
+        }
+        .cell-wrap:hover { filter: brightness(0.96); }
+        .cell-subject { font-size: 15px; font-weight: 700; line-height: 1.2; color: #1e293b; }
+        .cell-info    { font-size: 11px; color: #64748b; margin-top: 3px; }
+        .cell-empty   { color: #e2e8f0; font-size: 12px; }
+        .cell-block   { color: #cbd5e1; font-size: 18px; }
+
+        /* Lunch row */
+        .lunch-row td { background: #fef9c3 !important; height: 28px; }
+        .lunch-label  { font-size: 11px; color: #92400e; font-weight: 600; text-align: center; }
+
+        /* Subject colours */
+        .sc-國語  { background: #fef9c3; }
+        .sc-數學  { background: #dbeafe; }
+        .sc-英語  { background: #dbeafe; }
+        .sc-社會  { background: #fef3c7; }
+        .sc-自然  { background: #dcfce7; }
+        .sc-生活  { background: #ccfbf1; }
+        .sc-體育  { background: #fee2e2; }
+        .sc-藝文  { background: #f3e8ff; }
+        .sc-健康  { background: #ffe4e6; }
+        .sc-本土  { background: #ffedd5; }
+        .sc-綜合  { background: #f0fdf4; }
+        .sc-other { background: #f8fafc; }
+
+        /* ── Loading / Empty ── */
+        .loading-wrap { text-align: center; padding: 60px 20px; color: #94a3b8; }
+        .loading-spinner { width: 40px; height: 40px; border: 3px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .empty-hint { padding: 60px 20px; text-align: center; color: #94a3b8; font-size: 0.95rem; }
+
+        /* ── Print ── */
+        @media print {
+            .site-header, .query-panel, .print-btn { display: none !important; }
+            body { background: white; }
+            .schedule-card { box-shadow: none; border: 1px solid #ccc; border-radius: 0; }
+            .card-header { background: #1e3a5f !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .cell-wrap    { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+
+        @media (max-width: 600px) {
+            .card-title    { font-size: 1rem; }
+            .cell-subject  { font-size: 12px; }
+            .cell-info     { font-size: 10px; }
+            .schedule-table th { font-size: 0.75rem; padding: 6px 3px; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="site-header">
+    <h1>🏫 新莊國小 課表查詢</h1>
+    <p>老師 · 家長 · 學生皆可查詢</p>
+    <div class="last-updated" id="lastUpdated">資料載入中...</div>
+</header>
+
+<main class="main">
+
+    <!-- 查詢列 -->
+    <div class="query-panel">
+        <div class="query-group">
+            <label>查詢類型</label>
+            <div class="tab-group">
+                <button class="tab-btn active" id="tabClass"   onclick="switchTab('class')">班級課表</button>
+                <button class="tab-btn"        id="tabTeacher" onclick="switchTab('teacher')">教師課表</button>
+            </div>
+        </div>
+        <div class="query-group">
+            <label id="selectLabel">選擇班級</label>
+            <select class="query-select" id="querySelect" onchange="renderSchedule()">
+                <option value="">— 請選擇 —</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- 課表卡片 -->
+    <div class="schedule-card" id="scheduleCard">
+        <div class="empty-hint">👆 請選擇要查詢的班級或教師</div>
+    </div>
+
+</main>
+
+<script>
+// ── Firebase 初始化 ──────────────────────────
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.firestore();
+
+// ── 全域狀態 ────────────────────────────────
+let appData   = null;   // 從 Firestore 拉回的資料
+let queryMode = 'class'; // 'class' | 'teacher'
+
+const DAYS    = ['一','二','三','四','五'];
+const PERIODS = [1,2,3,4,5,6,7];
+const PERIOD_TIMES = { 1:'08:00',2:'08:50',3:'09:50',4:'10:40',5:'13:10',6:'14:00',7:'14:50' };
+
+// ── 載入 Firestore 資料 ──────────────────────
+async function loadData() {
+    try {
+        const snap = await db.doc(FS_DOC_PATH).get();
+        if (!snap.exists) {
+            document.getElementById('scheduleCard').innerHTML =
+                '<div class="empty-hint">☁️ 雲端尚未有課表資料，請等管理員發布後再來查詢。</div>';
+            document.getElementById('lastUpdated').textContent = '尚未有資料';
+            return;
+        }
+        appData = snap.data();
+
+        // 顯示更新時間
+        if (appData.updatedAt) {
+            const d = appData.updatedAt.toDate();
+            document.getElementById('lastUpdated').textContent =
+                '最後更新：' + d.toLocaleString('zh-TW');
+        }
+
+        buildSelect();
+    } catch(e) {
+        document.getElementById('scheduleCard').innerHTML =
+            `<div class="empty-hint">❌ 資料載入失敗：${e.message}</div>`;
+    }
+}
+
+// ── 建立下拉選單 ─────────────────────────────
+function buildSelect() {
+    const sel = document.getElementById('querySelect');
+    sel.innerHTML = '<option value="">— 請選擇 —</option>';
+
+    if (queryMode === 'class') {
+        // 依年級分組
+        const gradeConfig = appData.gradeConfig || {};
+        for (let g = 1; g <= 6; g++) {
+            const count = gradeConfig[g] || 0;
+            if (count === 0) continue;
+            const grp = document.createElement('optgroup');
+            grp.label = `${g} 年級`;
+            for (let c = 1; c <= count; c++) {
+                const cid = `${g}${c.toString().padStart(2,'0')}`;
+                const opt = document.createElement('option');
+                opt.value = cid;
+                opt.textContent = `${cid} 班`;
+                grp.appendChild(opt);
+            }
+            sel.appendChild(grp);
+        }
+    } else {
+        // 教師列表（依角色分組）
+        const teachers = appData.teachers || [];
+        const roles = ['主任','組長','科任','導師'];
+        roles.forEach(role => {
+            const group = teachers.filter(t => t.role === role);
+            if (!group.length) return;
+            const grp = document.createElement('optgroup');
+            grp.label = role;
+            group.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                opt.textContent = t.name;
+                grp.appendChild(opt);
+            });
+            sel.appendChild(grp);
+        });
+    }
+}
+
+// ── 切換查詢模式 ─────────────────────────────
+function switchTab(mode) {
+    queryMode = mode;
+    document.getElementById('tabClass').classList.toggle('active',   mode === 'class');
+    document.getElementById('tabTeacher').classList.toggle('active', mode === 'teacher');
+    document.getElementById('selectLabel').textContent = mode === 'class' ? '選擇班級' : '選擇教師';
+    if (appData) buildSelect();
+    document.getElementById('scheduleCard').innerHTML =
+        '<div class="empty-hint">👆 請選擇要查詢的班級或教師</div>';
+}
+
+// ── 渲染課表 ─────────────────────────────────
+function renderSchedule() {
+    const val = document.getElementById('querySelect').value;
+    if (!val || !appData) return;
+
+    const card = document.getElementById('scheduleCard');
+
+    if (queryMode === 'class') {
+        renderClassSchedule(val, card);
+    } else {
+        renderTeacherSchedule(parseInt(val), card);
+    }
+}
+
+function getTeacherName(tid) {
+    return appData.teachers?.find(t => t.id == tid)?.name || '';
+}
+function getClassName(cid) { return `${cid} 班`; }
+function getHomeroomId(cid) {
+    return appData.teachers?.find(t => t.classId === cid)?.id;
+}
+
+function cellBg(subject) {
+    const known = ['國語','數學','英語','社會','自然','生活','體育','藝文','健康','本土','綜合'];
+    return known.includes(subject) ? `sc-${subject}` : 'sc-other';
+}
+
+function buildTable(titleMain, titleSub, rowsFn) {
+    return `
+    <div class="card-header">
+        <div>
+            <div class="card-title">${titleMain}</div>
+            <div class="card-subtitle">${titleSub}</div>
+        </div>
+        <button class="print-btn" onclick="window.print()">🖨️ 列印</button>
+    </div>
+    <div style="overflow-x:auto">
+    <table class="schedule-table">
+        <thead>
+            <tr>
+                <th class="period-th">節次</th>
+                ${DAYS.map(d => `<th>週${d}</th>`).join('')}
+            </tr>
+        </thead>
+        <tbody>${rowsFn()}</tbody>
+    </table>
+    </div>`;
+}
+
+function renderClassSchedule(cid, card) {
+    const schedule  = appData.schedule  || {};
+    const teachers  = appData.teachers  || [];
+    const htId = getHomeroomId(cid);
+    const htName = htId ? getTeacherName(htId) : '導師';
+
+    const title    = `${cid} 班 課表`;
+    const subtitle = `導師：${htName}`;
+
+    card.innerHTML = buildTable(title, subtitle, () => {
+        let html = '';
+        PERIODS.forEach(p => {
+            html += `<tr>`;
+            html += `<td class="period-col">
+                        <span class="period-label">${p}</span>
+                        <span class="period-time">${PERIOD_TIMES[p]}</span>
+                     </td>`;
+            DAYS.forEach(d => {
+                const cell = schedule[cid]?.[d]?.[p];
+                if (cell && cell.type === 'block') {
+                    html += `<td><div class="cell-wrap"><span class="cell-block">✕</span></div></td>`;
+                } else if (cell && cell.subject) {
+                    const tName = cell.teacherId == htId ? '導師' : getTeacherName(cell.teacherId);
+                    html += `<td><div class="cell-wrap ${cellBg(cell.subject)}">
+                        <span class="cell-subject">${cell.subject}</span>
+                        <span class="cell-info">${tName}</span>
+                    </div></td>`;
+                } else {
+                    html += `<td><div class="cell-wrap"><span class="cell-empty">—</span></div></td>`;
+                }
+            });
+            html += `</tr>`;
+            // Lunch break after period 4
+            if (p === 4) {
+                html += `<tr class="lunch-row">
+                    <td><div class="lunch-label">午休</div></td>
+                    <td colspan="5"><div class="lunch-label">午餐 · 午休時間</div></td>
+                </tr>`;
+            }
+        });
+        return html;
+    });
+}
+
+function renderTeacherSchedule(tid, card) {
+    const schedule = appData.schedule || {};
+    const teacher  = appData.teachers?.find(t => t.id == tid);
+    if (!teacher) return;
+
+    const title    = `${teacher.name} 老師 課表`;
+    const subtitle = teacher.title_note ? `${teacher.role}・${teacher.title_note}` : teacher.role;
+
+    card.innerHTML = buildTable(title, subtitle, () => {
+        let html = '';
+        PERIODS.forEach(p => {
+            const k = `${''}-${p}`; // used for constraints check below
+            html += `<tr>`;
+            html += `<td class="period-col">
+                        <span class="period-label">${p}</span>
+                        <span class="period-time">${PERIOD_TIMES[p]}</span>
+                     </td>`;
+            DAYS.forEach(d => {
+                // Check block constraint
+                if (teacher.constraints?.includes(`${d}-${p}`)) {
+                    html += `<td><div class="cell-wrap"><span class="cell-block">✕</span></div></td>`;
+                    return;
+                }
+                // Find class where this teacher teaches at this slot
+                let found = null;
+                for (const cid in schedule) {
+                    const cell = schedule[cid]?.[d]?.[p];
+                    if (cell && cell.teacherId == tid) { found = { cid, cell }; break; }
+                }
+                if (found) {
+                    html += `<td><div class="cell-wrap ${cellBg(found.cell.subject)}">
+                        <span class="cell-subject">${found.cell.subject}</span>
+                        <span class="cell-info">${found.cid} 班</span>
+                    </div></td>`;
+                } else {
+                    html += `<td><div class="cell-wrap"><span class="cell-empty">—</span></div></td>`;
+                }
+            });
+            html += `</tr>`;
+            if (p === 4) {
+                html += `<tr class="lunch-row">
+                    <td><div class="lunch-label">午休</div></td>
+                    <td colspan="5"><div class="lunch-label">午餐 · 午休時間</div></td>
+                </tr>`;
+            }
+        });
+        return html;
+    });
+}
+
+// ── 啟動 ─────────────────────────────────────
+document.getElementById('scheduleCard').innerHTML =
+    '<div class="loading-wrap"><div class="loading-spinner"></div>資料載入中...</div>';
+loadData();
+</script>
+</body>
+</html>
