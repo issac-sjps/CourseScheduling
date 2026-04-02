@@ -312,8 +312,7 @@ firebase.initializeApp(FIREBASE_CONFIG);
 const db = firebase.firestore();
 
 // ── Constants ─────────────────────────────────
-// DAYS, PERIOD_IDXS, PERIOD_TIMES are defined in data.js
-const PERIODS = PERIOD_IDXS; // alias for local use
+// DAYS, PERIOD_IDXS, PERIOD_IDXS, PERIOD_TIMES are all defined in data.js
 
 // ── App State ─────────────────────────────────
 let appData      = null;   // full Firestore payload
@@ -431,7 +430,7 @@ function countPlaced(cid, subj) {
     const schedule = appData.schedule || {};
     let n = 0;
     for (const d of DAYS) {
-        for (const p of PERIODS) {
+        for (const p of PERIOD_IDXS) {
             const cell = schedule[cid]?.[d]?.[p];
             if (cell && cell.subject === subj && cell.teacherId == htId) n++;
         }
@@ -457,7 +456,7 @@ function renderGrid() {
     DAYS.forEach(d => grid.appendChild(el('div','grid-head',`週${d}`)));
 
     // Period rows
-    PERIODS.forEach(p => {
+    PERIOD_IDXS.forEach(p => {
         // Period label cell
         const pc = document.createElement('div');
         pc.className = 'period-cell';
@@ -572,7 +571,7 @@ function handleCellClick(d, p) {
             swapSource = { d, p };
             document.getElementById(cellId(d,p)).classList.add('swap-source');
             // Highlight valid targets
-            DAYS.forEach(td => PERIODS.forEach(tp => {
+            DAYS.forEach(td => PERIOD_IDXS.forEach(tp => {
                 if (td === d && tp === p) return;
                 if (isSystemBlocked(currentCid, td, tp)) return;
                 const tData = schedule[currentCid]?.[td]?.[tp];
