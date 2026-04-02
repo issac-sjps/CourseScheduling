@@ -134,23 +134,16 @@
                         class="px-3 py-1 rounded text-sm transition">{{ tab.name }}</button>
                 </nav>
             </div>
-            <div class="flex gap-2 text-sm items-center">
-                <!-- 雲端同步狀態 -->
-                <div class="flex items-center gap-1 bg-gray-700 rounded px-2 py-1 text-xs">
-                    <span v-if="syncStatus==='idle'"    class="w-2 h-2 rounded-full bg-gray-400 inline-block"></span>
+            <div class="flex gap-2 text-sm items-center flex-wrap">
+                <div class="flex items-center gap-1.5 bg-gray-700 rounded px-2.5 py-1.5 text-xs border border-gray-600">
                     <span v-if="syncStatus==='syncing'" class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse inline-block"></span>
-                    <span v-if="syncStatus==='ok'"      class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
-                    <span v-if="syncStatus==='error'"   class="w-2 h-2 rounded-full bg-red-400 inline-block"></span>
+                    <span v-else-if="syncStatus==='ok'" class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+                    <span v-else                         class="w-2 h-2 rounded-full bg-red-400 inline-block"></span>
                     <span class="text-gray-300">{{ syncLabel }}</span>
                 </div>
-                <button @click="saveData(true)"    class="btn btn-green">💾 本機存</button>
-                <button @click="pushToFirestore"   class="btn btn-blue">☁️ 發布雲端</button>
-                <button @click="pullFromFirestore" class="btn" style="background:#0ea5e9;color:white">⬇️ 從雲端載入</button>
-                <button @click="exportData"        class="btn btn-blue">📤 備份</button>
-                <label class="btn btn-blue cursor-pointer bg-yellow-600 hover:bg-yellow-700">
-                    📥 匯入 <input type="file" @change="importData" class="hidden">
-                </label>
-                <button @click="resetData" class="btn btn-red">⚠️ 重置</button>
+                <button @click="pushToFirestore" class="btn btn-green">☁️ 發布雲端</button>
+                <a href="view.html"     target="_blank" class="btn" style="background:#0891b2;color:white;text-decoration:none">👁️ 課表查詢</a>
+                <a href="homeroom.html" target="_blank" class="btn" style="background:#7c3aed;color:white;text-decoration:none">✏️ 導師排課</a>
             </div>
         </div>
     </div>
@@ -770,10 +763,10 @@ createApp({
         // ── 1. STATE ──────────────────────────────────────────────
         const currentTab  = ref('settings');
         const assignMode  = ref('class');
-        const syncStatus  = ref('idle'); // idle | syncing | ok | error
+        const syncStatus  = ref('syncing'); // syncing | ok | error
         const syncLabel   = computed(() => ({
-            idle: '未同步', syncing: '同步中...', ok: '已發布', error: '同步失敗'
-        }[syncStatus.value]));
+            syncing: '同步中...', ok: '已同步', error: '同步失敗'
+        }[syncStatus.value] || '同步中...'));
         const tabs = [
             { id:'settings',          name:'01.基礎設定'    },
             { id:'teachers',          name:'02.教師管理'    },
@@ -1322,53 +1315,29 @@ createApp({
                 alert('❌ 載入失敗：' + e.message);
             }
         }
-        function loadData() {
+        // ── 載入雲端資料（共用邏輯）────────────────────────────
+        function applyCloudData(d) {
+            teachers.value           = d.teachers           || getDefaultTeachers(gradeConfig.value);
+            gradeConfig.value        = d.gradeConfig         || JSON.parse(JSON.stringify(DEFAULT_GRADE_CLASS_COUNT));
+            gradeSubjectConfig.value = d.gradeSubjectConfig  || JSON.parse(JSON.stringify(DEFAULT_GRADE_MATRIX));
+            scheduleData.value       = d.schedule            || {};
+            assignments.value        = d.assignments         || {};
+            specialRules.value       = d.specialRules        || [];
+            teacherTargets.value     = d.teacherTargets      || {};
+            teachers.value.forEach(t => { if (!Array.isArray(t.constraints)) t.constraints = []; });
+        }
+
+        async function loadFromCloud(silent = false) {
+            if (!silent) syncStatus.value = 'syncing';
             try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (!raw) { teachers.value = getDefaultTeachers(gradeConfig.value); return; }
-                const d = JSON.parse(raw);
-                teachers.value          = d.teachers          || getDefaultTeachers(gradeConfig.value);
-                gradeConfig.value       = d.gradeConfig        || JSON.parse(JSON.stringify(DEFAULT_GRADE_CLASS_COUNT));
-                gradeSubjectConfig.value= d.gradeSubjectConfig || JSON.parse(JSON.stringify(DEFAULT_GRADE_MATRIX));
-                scheduleData.value      = d.schedule           || {};
-                assignments.value       = d.assignments        || {};
-                specialRules.value      = d.specialRules       || [];
-                teacherTargets.value    = d.teacherTargets     || {};
-                // Ensure all teachers have constraints array (migrate old data)
-                teachers.value.forEach(t => { if (!Array.isArray(t.constraints)) t.constraints = []; });
+                const snap = await db.doc(FS_DOC_PATH).get();
+                if (snap.exists) applyCloudData(snap.data());
+                else teachers.value = getDefaultTeachers(gradeConfig.value);
+                syncStatus.value = 'ok';
             } catch(e) {
-                console.error('Load failed:', e);
-                teachers.value = getDefaultTeachers(gradeConfig.value);
+                syncStatus.value = 'error';
+                if (!silent) console.error('Cloud load failed:', e);
             }
-        }
-        function resetData() {
-            if (confirm('確定重置所有資料？此操作無法還原！')) {
-                localStorage.removeItem(STORAGE_KEY);
-                location.reload();
-            }
-        }
-        // FIX: clean export / import (no double stringify)
-        function exportData() {
-            const raw = localStorage.getItem(STORAGE_KEY) || '{}';
-            const a = document.createElement('a');
-            a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(raw);
-            a.download = `backup_v47_${new Date().toISOString().slice(0,10)}.json`;
-            a.click();
-        }
-        function importData(e) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                try {
-                    // Validate JSON
-                    JSON.parse(ev.target.result);
-                    localStorage.setItem(STORAGE_KEY, ev.target.result);
-                    loadData();
-                    alert('✅ 匯入成功！');
-                } catch {
-                    alert('❌ 檔案格式錯誤，請確認為正確的備份 JSON 檔。');
-                }
-            };
-            reader.readAsText(e.target.files[0]);
         }
 
         // FIX: print as method
@@ -1483,7 +1452,11 @@ createApp({
             if (v.length > 0 && !selectedTeacherId.value) selectedTeacherId.value = v[0].id;
         }, { immediate: true });
 
-        onMounted(loadData);
+        onMounted(async () => {
+            await loadFromCloud();
+            // 每 5 秒背景靜默更新（不打斷操作）
+            setInterval(() => loadFromCloud(true), 5000);
+        });
 
         // ── RETURN ────────────────────────────────────────────────
         return {
@@ -1510,8 +1483,8 @@ createApp({
             runGlobalAutoFill, runRuleValidation,
             addTeacher, regenerateTeachers,
             exportTeacherCSV, importTeacherCSV,
-            saveData, exportData, importData, resetData, doPrint,
-            pushToFirestore, pullFromFirestore, syncStatus, syncLabel,
+            saveData, doPrint,
+            pushToFirestore, syncStatus, syncLabel,
         };
     }
 }).mount('#app');
