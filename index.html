@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>國小排課系統 V47.3</title>
+    <title>國小排課系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="data.js"></script>
@@ -126,7 +126,7 @@
     <div class="bg-gray-800 text-white p-3 sticky top-0 z-50 shadow no-print">
         <div class="flex flex-wrap justify-between items-center max-w-[1800px] mx-auto gap-2">
             <div class="flex items-center gap-4">
-                <h1 class="text-xl font-bold text-yellow-400">🏫 排課 V47.2</h1>
+                <h1 class="text-xl font-bold text-yellow-400">🏫 排課系統</h1>
                 <nav class="flex bg-gray-700 rounded p-1 gap-1 flex-wrap">
                     <button v-for="tab in tabs" :key="tab.id"
                         @click="currentTab = tab.id"
@@ -141,7 +141,6 @@
                     <span v-else                         class="w-2 h-2 rounded-full bg-red-400 inline-block"></span>
                     <span class="text-gray-300">{{ syncLabel }}</span>
                 </div>
-                <button @click="pushToFirestore" class="btn btn-green">☁️ 發布雲端</button>
                 <a href="view.html"     target="_blank" class="btn" style="background:#0891b2;color:white;text-decoration:none">👁️ 課表查詢</a>
                 <a href="homeroom.html" target="_blank" class="btn" style="background:#7c3aed;color:white;text-decoration:none">✏️ 導師排課</a>
             </div>
@@ -679,7 +678,7 @@
 
                     <div class="print-footer">
                         <span>■ 科任課  ■ 導師課</span>
-                        <span>本校排課系統 V47.2</span>
+                        <span>本校排課系統</span>
                     </div>
                 </div>
             </div>
@@ -765,8 +764,8 @@ createApp({
         const assignMode  = ref('class');
         const syncStatus  = ref('syncing'); // syncing | ok | error
         const syncLabel   = computed(() => ({
-            syncing: '同步中...', ok: '已同步', error: '同步失敗'
-        }[syncStatus.value] || '同步中...'));
+            syncing: '儲存中...', ok: '✓ 已同步', error: '⚠ 儲存失敗'
+        }[syncStatus.value] || '儲存中...'));
         const tabs = [
             { id:'settings',          name:'01.基礎設定'    },
             { id:'teachers',          name:'02.教師管理'    },
@@ -1254,18 +1253,29 @@ createApp({
 
         // ── 13. PERSIST ──────────────────────────────────────────
         // FIX: use consistent key STORAGE_KEY from data.js
-        function saveData(alertUser = false) {
-            const payload = {
-                teachers: teachers.value,
-                gradeConfig: gradeConfig.value,
-                gradeSubjectConfig: gradeSubjectConfig.value,
-                schedule: scheduleData.value,
-                assignments: assignments.value,
-                specialRules: specialRules.value,
-                teacherTargets: teacherTargets.value,
-            };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-            if (alertUser) alert('✅ 已存入本機！');
+        // saveData: 每次操作後自動存雲端（fire-and-forget，不 block UI）
+        function saveData() {
+            if (saveData._timer) clearTimeout(saveData._timer);
+            saveData._timer = setTimeout(async () => {
+                syncStatus.value = 'syncing';
+                try {
+                    const payload = {
+                        teachers: teachers.value,
+                        gradeConfig: gradeConfig.value,
+                        gradeSubjectConfig: gradeSubjectConfig.value,
+                        schedule: scheduleData.value,
+                        assignments: assignments.value,
+                        specialRules: specialRules.value,
+                        teacherTargets: teacherTargets.value,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    };
+                    await db.doc(FS_DOC_PATH).set(payload);
+                    syncStatus.value = 'ok';
+                } catch(e) {
+                    syncStatus.value = 'error';
+                    console.error('Auto-save failed:', e);
+                }
+            }, 800); // debounce 800ms，避免連續操作打太多請求
         }
 
         // ── 雲端同步 ──────────────────────────────────────────────
@@ -1307,7 +1317,6 @@ createApp({
                 specialRules.value       = d.specialRules        || [];
                 teacherTargets.value     = d.teacherTargets      || {};
                 teachers.value.forEach(t => { if (!Array.isArray(t.constraints)) t.constraints = []; });
-                saveData(); // 同步後也存本機
                 syncStatus.value = 'ok';
                 alert('✅ 已從雲端載入最新資料！');
             } catch (e) {
@@ -1484,7 +1493,7 @@ createApp({
             addTeacher, regenerateTeachers,
             exportTeacherCSV, importTeacherCSV,
             saveData, doPrint,
-            pushToFirestore, syncStatus, syncLabel,
+            syncStatus, syncLabel,
         };
     }
 }).mount('#app');
