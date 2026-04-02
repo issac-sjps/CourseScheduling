@@ -312,9 +312,8 @@ firebase.initializeApp(FIREBASE_CONFIG);
 const db = firebase.firestore();
 
 // ── Constants ─────────────────────────────────
-const DAYS    = ['一','二','三','四','五'];
-const PERIODS = [1,2,3,4,5,6,7];
-const PERIOD_TIMES = {1:'08:00',2:'08:50',3:'09:50',4:'10:40',5:'13:10',6:'14:00',7:'14:50'};
+// DAYS, PERIOD_IDXS, PERIOD_TIMES are defined in data.js
+const PERIODS = PERIOD_IDXS; // alias for local use
 
 // ── App State ─────────────────────────────────
 let appData      = null;   // full Firestore payload
