@@ -278,7 +278,8 @@
                                 <tr>
                                     <th class="text-left w-12 sticky top-0 bg-gray-50 p-1 border-b">班級</th>
                                     <th v-for="s in getSubjectsForGrade(g)" class="min-w-[60px] sticky top-0 bg-gray-50 p-1 text-center border-b" :class="getSubjectColor(s.zh)">
-                                        {{ s.zh }} <span class="block text-gray-500">({{ getPeriodCount(g, s.zh) }})</span>
+                                        {{ s.zh }}
+                                        <span class="block font-bold" :class="getPeriodCount(g, s.zh) > 0 ? 'text-red-500' : 'text-gray-300'">({{ getPeriodCount(g, s.zh) }})</span>
                                     </th>
                                 </tr>
                             </thead>
@@ -486,7 +487,61 @@
         </div>
 
         <!-- ══════════════════════════════════
-             07. 科任排課
+             07. 科任預排課
+        ═══════════════════════════════════════ -->
+        <div v-show="currentTab === 'specialist_pre'" class="no-print">
+            <!-- 說明 -->
+            <div class="bg-amber-50 border border-amber-200 rounded p-3 mb-4 text-sm text-amber-800 flex gap-2 items-start">
+                <span class="text-lg">💡</span>
+                <div>在這裡先把有<strong>特殊時段需求</strong>的科任老師課排好（例如：固定某節去別班），再到「科任排課」分頁執行一鍵排課。</div>
+            </div>
+            <div class="bg-white p-3 rounded shadow flex flex-col gap-3 mb-4">
+                <div class="flex gap-2 border-b pb-2 items-center flex-wrap">
+                    <span class="font-bold">科任預排課：</span>
+                    <select v-model="selectedTeacherId" class="border p-1 rounded font-bold w-40">
+                        <option v-for="t in specialistTeachers" :value="t.id">{{ t.name }}</option>
+                    </select>
+                    <span class="text-xs text-gray-500 ml-2">已排 {{ getPlacedCount(selectedTeacherId) }} / 應排 {{ getTotalAssigned(selectedTeacherId) }} 節</span>
+                </div>
+                <div class="space-y-2">
+                    <div v-for="role in ['主任','組長','科任']" :key="role" class="flex items-start gap-2 border-b border-dashed pb-1">
+                        <div class="font-bold text-gray-500 w-12 text-center text-sm pt-1">{{ role }}</div>
+                        <div class="flex flex-wrap gap-1">
+                            <button v-for="t in getTeachersByRoleGroup(role)" :key="t.id"
+                                @click="selectedTeacherId = t.id" class="select-btn text-xs"
+                                :class="{'active': selectedTeacherId === t.id}">
+                                {{ t.name }}
+                                <span class="ml-1 opacity-60 text-[10px]">{{ getPlacedCount(t.id) }}/{{ getTotalAssigned(t.id) }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded shadow overflow-x-auto">
+                <h2 class="text-center font-bold text-xl mb-2">{{ getTeacherName(selectedTeacherId) }} 預排課表</h2>
+                <div class="editor-grid">
+                    <div class="editor-cell bg-gray-200 font-bold">節</div>
+                    <div v-for="d in days" class="editor-cell bg-gray-200 font-bold">{{ d }}</div>
+                    <template v-for="p in periods">
+                        <div class="editor-cell bg-gray-100 font-bold text-xs">{{ p.idx }}</div>
+                        <div v-for="d in days" class="editor-cell border hover:bg-blue-50"
+                            :class="{'cell-blocked': isTeacherBlocked(d, p.idx)}"
+                            @click="handleTeacherCellClick(d, p.idx)">
+                            <div v-if="getCellDisplay(d, p.idx, 'teacher')" class="w-full h-full flex flex-col justify-center items-center p-1">
+                                <span v-if="getCellDisplay(d, p.idx, 'teacher').type=='block'" class="text-red-500 font-bold text-2xl">✕</span>
+                                <div v-else>
+                                    <div class="font-bold" :class="getSubjectColor(getCellDisplay(d, p.idx, 'teacher').subject)">{{ getCellDisplay(d, p.idx, 'teacher').subject }}</div>
+                                    <div class="text-xs">{{ getCellDisplay(d, p.idx, 'teacher').subInfo }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════
+             08. 科任排課
         ═══════════════════════════════════════ -->
         <div v-show="currentTab === 'teacher_schedule'" class="no-print">
             <div class="bg-white p-3 rounded shadow flex flex-col gap-3 mb-4">
@@ -772,11 +827,12 @@ createApp({
             { id:'assignments',       name:'03.配課設定'    },
             { id:'special',           name:'04.🛡️ 特殊排課' },
             { id:'priority',          name:'05.⚡ 科任權重'  },
-            { id:'class_schedule',    name:'06.班級預排課'  },
-            { id:'teacher_schedule',  name:'07.科任排課'    },
-            { id:'rules',             name:'08.🚦 規則檢查'  },
-            { id:'stats',             name:'09.📊 統計資料'  },
-            { id:'query',             name:'10.查詢列印'    },
+            { id:'class_schedule',      name:'06.班級預排課'    },
+            { id:'specialist_pre',      name:'07.科任預排課'    },
+            { id:'teacher_schedule',    name:'08.科任排課'      },
+            { id:'rules',               name:'09.🚦 規則檢查'   },
+            { id:'stats',               name:'10.📊 統計資料'   },
+            { id:'query',               name:'11.查詢列印'      },
         ];
 
         const days    = DAYS;
@@ -939,6 +995,33 @@ createApp({
                 }
             }
             return list;
+        }
+
+        // 該老師已在課表中排入幾節
+        function getPlacedCount(tid) {
+            let count = 0;
+            for (const cid in scheduleData.value) {
+                for (const d in scheduleData.value[cid]) {
+                    for (const p in scheduleData.value[cid][d]) {
+                        if (scheduleData.value[cid][d][p]?.teacherId == tid) count++;
+                    }
+                }
+            }
+            return count;
+        }
+        // 該老師依配課設定應排幾節
+        function getTotalAssigned(tid) {
+            let count = 0;
+            for (const cid in assignments.value) {
+                const grade = parseInt(cid.charAt(0));
+                for (const subj in assignments.value[cid]) {
+                    const assign = assignments.value[cid][subj];
+                    if (assign.primary == tid) {
+                        count += (assign.override !== null ? assign.override : getPeriodCount(grade, subj));
+                    }
+                }
+            }
+            return count;
         }
 
         function getTeacherLoad(tid) {
@@ -1484,7 +1567,7 @@ createApp({
             getAssignment, setAssignment, getEffectivePeriod, adjustPeriodOverride,
             toggleTeacherClass, getAssignedClassesForTeacher,
             getTeacherTarget, getRealAssignedCount,
-            getTeacherLoad, calculateTargetLoad,
+            getTeacherLoad, calculateTargetLoad, getPlacedCount, getTotalAssigned,
             isSystemBlocked, isTeacherBlocked,
             getCellDisplay, handleClassCellClick, handleTeacherCellClick,
             saveCell, saveTeacherScheduleCell, deleteCell, clearAllSchedule,
