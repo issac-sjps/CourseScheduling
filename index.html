@@ -3,10 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>國小排課系統 V47.2</title>
+    <title>國小排課系統 V47.3</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="data.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script>
+        firebase.initializeApp(FIREBASE_CONFIG);
+        const db = firebase.firestore();
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
         body { font-family: 'Noto Sans TC', sans-serif; background: #f3f4f6; }
@@ -128,9 +134,19 @@
                         class="px-3 py-1 rounded text-sm transition">{{ tab.name }}</button>
                 </nav>
             </div>
-            <div class="flex gap-2 text-sm">
-                <button @click="saveData(true)" class="btn btn-green">💾 儲存</button>
-                <button @click="exportData"     class="btn btn-blue">📤 備份</button>
+            <div class="flex gap-2 text-sm items-center">
+                <!-- 雲端同步狀態 -->
+                <div class="flex items-center gap-1 bg-gray-700 rounded px-2 py-1 text-xs">
+                    <span v-if="syncStatus==='idle'"    class="w-2 h-2 rounded-full bg-gray-400 inline-block"></span>
+                    <span v-if="syncStatus==='syncing'" class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse inline-block"></span>
+                    <span v-if="syncStatus==='ok'"      class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+                    <span v-if="syncStatus==='error'"   class="w-2 h-2 rounded-full bg-red-400 inline-block"></span>
+                    <span class="text-gray-300">{{ syncLabel }}</span>
+                </div>
+                <button @click="saveData(true)"    class="btn btn-green">💾 本機存</button>
+                <button @click="pushToFirestore"   class="btn btn-blue">☁️ 發布雲端</button>
+                <button @click="pullFromFirestore" class="btn" style="background:#0ea5e9;color:white">⬇️ 從雲端載入</button>
+                <button @click="exportData"        class="btn btn-blue">📤 備份</button>
                 <label class="btn btn-blue cursor-pointer bg-yellow-600 hover:bg-yellow-700">
                     📥 匯入 <input type="file" @change="importData" class="hidden">
                 </label>
@@ -754,6 +770,10 @@ createApp({
         // ── 1. STATE ──────────────────────────────────────────────
         const currentTab  = ref('settings');
         const assignMode  = ref('class');
+        const syncStatus  = ref('idle'); // idle | syncing | ok | error
+        const syncLabel   = computed(() => ({
+            idle: '未同步', syncing: '同步中...', ok: '已發布', error: '同步失敗'
+        }[syncStatus.value]));
         const tabs = [
             { id:'settings',          name:'01.基礎設定'    },
             { id:'teachers',          name:'02.教師管理'    },
@@ -1252,7 +1272,55 @@ createApp({
                 teacherTargets: teacherTargets.value,
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-            if (alertUser) alert('✅ 系統已儲存！');
+            if (alertUser) alert('✅ 已存入本機！');
+        }
+
+        // ── 雲端同步 ──────────────────────────────────────────────
+        async function pushToFirestore() {
+            if (!confirm('確定將目前排課資料發布到雲端？老師端查詢頁面將會更新。')) return;
+            syncStatus.value = 'syncing';
+            try {
+                const payload = {
+                    teachers: teachers.value,
+                    gradeConfig: gradeConfig.value,
+                    gradeSubjectConfig: gradeSubjectConfig.value,
+                    schedule: scheduleData.value,
+                    assignments: assignments.value,
+                    specialRules: specialRules.value,
+                    teacherTargets: teacherTargets.value,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                };
+                await db.doc(FS_DOC_PATH).set(payload);
+                syncStatus.value = 'ok';
+                alert('✅ 已發布到雲端！老師端查詢頁面已更新。');
+            } catch (e) {
+                syncStatus.value = 'error';
+                alert('❌ 發布失敗：' + e.message);
+            }
+        }
+
+        async function pullFromFirestore() {
+            if (!confirm('從雲端載入最新資料？本機未儲存的變更將被覆蓋。')) return;
+            syncStatus.value = 'syncing';
+            try {
+                const snap = await db.doc(FS_DOC_PATH).get();
+                if (!snap.exists) { alert('雲端尚無資料，請先發布一次。'); syncStatus.value = 'idle'; return; }
+                const d = snap.data();
+                teachers.value           = d.teachers           || [];
+                gradeConfig.value        = d.gradeConfig         || JSON.parse(JSON.stringify(DEFAULT_GRADE_CLASS_COUNT));
+                gradeSubjectConfig.value = d.gradeSubjectConfig  || JSON.parse(JSON.stringify(DEFAULT_GRADE_MATRIX));
+                scheduleData.value       = d.schedule            || {};
+                assignments.value        = d.assignments         || {};
+                specialRules.value       = d.specialRules        || [];
+                teacherTargets.value     = d.teacherTargets      || {};
+                teachers.value.forEach(t => { if (!Array.isArray(t.constraints)) t.constraints = []; });
+                saveData(); // 同步後也存本機
+                syncStatus.value = 'ok';
+                alert('✅ 已從雲端載入最新資料！');
+            } catch (e) {
+                syncStatus.value = 'error';
+                alert('❌ 載入失敗：' + e.message);
+            }
         }
         function loadData() {
             try {
@@ -1443,6 +1511,7 @@ createApp({
             addTeacher, regenerateTeachers,
             exportTeacherCSV, importTeacherCSV,
             saveData, exportData, importData, resetData, doPrint,
+            pushToFirestore, pullFromFirestore, syncStatus, syncLabel,
         };
     }
 }).mount('#app');
