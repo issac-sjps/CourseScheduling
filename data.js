@@ -63,6 +63,12 @@ const PERIODS = [
     { idx: 7, label: '第7節' },
 ];
 
+// 節次對應時間（各頁共用）
+const PERIOD_TIMES = { 1:'08:00', 2:'08:50', 3:'09:50', 4:'10:40', 5:'13:10', 6:'14:00', 7:'14:50' };
+
+// view.html / homeroom.html 用的純數字陣列
+const PERIOD_IDXS = [1, 2, 3, 4, 5, 6, 7];
+
 // 科目顏色 mapping
 const SUBJECT_COLOR_MAP = [
     { match: ['英語', '世界之窗'], cls: 'sub-color-eng' },
