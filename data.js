@@ -1,9 +1,23 @@
 // =============================================
 // data.js — 學校排課系統 靜態設定資料
-// 版本: V47.2
+// 版本: V47.3 (Firebase 版)
 // =============================================
 
 const STORAGE_KEY = 'schoolSchedule_v47';
+
+// ── Firebase 設定 ──────────────────────────
+const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDF1vk1di34RHuCdUAf64oYG8F3EvFHJ3o",
+    authDomain: "sjps-coursescheduling.firebaseapp.com",
+    projectId: "sjps-coursescheduling",
+    storageBucket: "sjps-coursescheduling.firebasestorage.app",
+    messagingSenderId: "51144689799",
+    appId: "1:51144689799:web:38476e81b3c8abc52a5022",
+    measurementId: "G-CEK1EKWL9Q"
+};
+
+// Firestore 文件路徑（所有資料存在同一份文件）
+const FS_DOC_PATH = 'schedule/main';
 
 const SUBJECTS = [
     { zh: '國語',   alias: '部定' },
