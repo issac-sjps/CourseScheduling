@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>導師排課 — 新莊國小</title>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="data.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Noto Sans TC', sans-serif; background: #f0f4f8; min-height: 100vh; }
+
+        /* ── Header ── */
+        .site-header {
+            background: linear-gradient(135deg, #064e3b 0%, #059669 100%);
+            color: white; padding: 16px 20px;
+            box-shadow: 0 4px 20px rgba(5,150,105,0.3);
+            display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+        }
+        .header-left h1 { font-size: 1.2rem; font-weight: 900; letter-spacing: 1px; }
+        .header-left p  { font-size: 0.8rem; opacity: 0.75; margin-top: 2px; }
+        .header-class-badge {
+            background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.35);
+            border-radius: 10px; padding: 6px 16px; font-size: 1rem; font-weight: 900;
+            letter-spacing: 2px; display: none;
+        }
+
+        /* ── Step: choose class ── */
+        .step-choose {
+            max-width: 500px; margin: 60px auto; padding: 20px;
+        }
+        .choose-card {
+            background: white; border-radius: 16px; padding: 32px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center;
+        }
+        .choose-card h2 { font-size: 1.3rem; font-weight: 900; color: #064e3b; margin-bottom: 8px; }
+        .choose-card p  { font-size: 0.9rem; color: #6b7280; margin-bottom: 24px; }
+        .choose-select {
+            width: 100%; border: 2px solid #d1fae5; border-radius: 10px; padding: 10px 14px;
+            font-size: 1.1rem; font-family: inherit; font-weight: 700; color: #064e3b;
+            background: white; outline: none; margin-bottom: 16px; cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .choose-select:focus { border-color: #059669; }
+        .enter-btn {
+            width: 100%; background: linear-gradient(135deg,#059669,#047857);
+            color: white; border: none; border-radius: 10px; padding: 12px;
+            font-size: 1rem; font-weight: 700; font-family: inherit; cursor: pointer;
+            transition: opacity 0.2s; letter-spacing: 1px;
+        }
+        .enter-btn:hover   { opacity: 0.9; }
+        .enter-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* ── Main editor ── */
+        .editor-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; display: none; }
+
+        /* ── Toolbar ── */
+        .toolbar {
+            background: white; border-radius: 12px; padding: 12px 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 14px;
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+        }
+        .toolbar-btn {
+            padding: 7px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 700;
+            border: none; cursor: pointer; font-family: inherit; transition: all 0.15s;
+            display: inline-flex; align-items: center; gap: 5px;
+        }
+        .btn-green  { background: #059669; color: white; }
+        .btn-green:hover  { background: #047857; }
+        .btn-gray   { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+        .btn-gray:hover   { background: #e5e7eb; }
+        .btn-orange { background: #f97316; color: white; }
+        .btn-orange:hover { background: #ea580c; }
+        .save-status { font-size: 0.8rem; color: #6b7280; margin-left: auto; }
+        .save-status.ok  { color: #059669; font-weight: 700; }
+        .save-status.err { color: #dc2626; font-weight: 700; }
+
+        /* ── Progress bar ── */
+        .progress-wrap {
+            background: white; border-radius: 12px; padding: 14px 18px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 14px;
+        }
+        .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .progress-title  { font-size: 0.85rem; font-weight: 700; color: #374151; }
+        .progress-count  { font-size: 0.8rem; color: #6b7280; }
+        .progress-bar-bg { background: #f3f4f6; border-radius: 999px; height: 8px; overflow: hidden; }
+        .progress-bar-fill { background: linear-gradient(90deg,#059669,#34d399); height: 100%; border-radius: 999px; transition: width 0.4s; }
+        .subject-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .subject-chip {
+            font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+            border: 1.5px solid; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .chip-done    { background: #dcfce7; border-color: #86efac; color: #166534; }
+        .chip-partial { background: #fef9c3; border-color: #fde047; color: #854d0e; }
+        .chip-empty   { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+
+        /* ── Grid ── */
+        .grid-wrap { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); overflow: hidden; }
+        .schedule-grid {
+            display: grid;
+            grid-template-columns: 48px repeat(5, 1fr);
+            gap: 1px; background: #e5e7eb;
+        }
+        .grid-head {
+            background: #f8fafc; font-weight: 700; font-size: 0.85rem; color: #475569;
+            display: flex; align-items: center; justify-content: center;
+            padding: 10px 4px; text-align: center;
+        }
+        .grid-head.corner { background: #f1f5f9; }
+        .period-cell {
+            background: #f8fafc; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding: 4px 2px; gap: 1px;
+        }
+        .period-num  { font-size: 13px; font-weight: 800; color: #334155; }
+        .period-time { font-size: 9px; color: #94a3b8; }
+
+        /* ── Schedule cells ── */
+        .sched-cell {
+            background: white; min-height: 68px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; text-align: center;
+            padding: 4px 3px; position: relative; transition: all 0.15s;
+        }
+
+        /* Locked: specialist already placed */
+        .sched-cell.locked {
+            background: #f8fafc; cursor: default;
+        }
+        .locked-badge {
+            position: absolute; top: 3px; right: 3px;
+            font-size: 9px; background: #e2e8f0; color: #64748b;
+            border-radius: 4px; padding: 1px 4px; font-weight: 700;
+        }
+
+        /* System blocked (不排) */
+        .sched-cell.sys-blocked {
+            background: repeating-linear-gradient(
+                135deg, #f3f4f6 0px, #f3f4f6 6px, #e5e7eb 6px, #e5e7eb 12px
+            );
+            cursor: not-allowed;
+        }
+
+        /* Homeroom editable empty */
+        .sched-cell.editable-empty {
+            cursor: pointer; border: 2px dashed #d1fae5;
+        }
+        .sched-cell.editable-empty:hover { background: #ecfdf5; border-color: #6ee7b7; }
+
+        /* Homeroom filled */
+        .sched-cell.homeroom-filled { cursor: pointer; border: 2px solid transparent; }
+        .sched-cell.homeroom-filled:hover { filter: brightness(0.95); }
+
+        /* Marked as no-class */
+        .sched-cell.no-class { background: #fef2f2; border: 2px dashed #fca5a5; cursor: pointer; }
+        .sched-cell.no-class:hover { background: #fee2e2; }
+
+        .cell-subject { font-size: 14px; font-weight: 700; line-height: 1.2; }
+        .cell-sub     { font-size: 10px; color: #64748b; margin-top: 2px; }
+        .cell-empty-hint { font-size: 10px; color: #a7f3d0; font-weight: 600; }
+        .cell-no-class   { font-size: 11px; color: #f87171; font-weight: 700; }
+        .cell-add-icon   { font-size: 20px; color: #d1fae5; }
+
+        /* Subject colour mapping */
+        .sc-國語  { background: #fef9c3; } .sc-數學 { background: #dbeafe; }
+        .sc-英語  { background: #dbeafe; } .sc-社會 { background: #fef3c7; }
+        .sc-自然  { background: #dcfce7; } .sc-生活 { background: #ccfbf1; }
+        .sc-體育  { background: #fee2e2; } .sc-藝文 { background: #f3e8ff; }
+        .sc-健康  { background: #ffe4e6; } .sc-本土 { background: #ffedd5; }
+        .sc-綜合  { background: #f0fdf4; } .sc-other{ background: #f8fafc;  }
+
+        /* ── Swap mode ── */
+        .sched-cell.swap-source { outline: 3px solid #f97316; outline-offset: -3px; background: #fff7ed !important; }
+        .sched-cell.swap-target { outline: 3px dashed #059669; outline-offset: -3px; }
+        .swap-banner {
+            background: #fff7ed; border: 2px solid #f97316; border-radius: 10px;
+            padding: 10px 16px; font-size: 0.85rem; color: #c2410c; font-weight: 700;
+            display: flex; align-items: center; gap: 8px; margin-bottom: 14px; display: none;
+        }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+            display: flex; align-items: center; justify-content: center; z-index: 100;
+            padding: 16px;
+        }
+        .modal-box {
+            background: white; border-radius: 16px; padding: 24px;
+            width: 100%; max-width: 340px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+        .modal-title { font-size: 1rem; font-weight: 900; color: #1e293b; margin-bottom: 4px; }
+        .modal-sub   { font-size: 0.8rem; color: #6b7280; margin-bottom: 16px; }
+        .subject-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;
+        }
+        .subj-btn {
+            padding: 10px 4px; border-radius: 8px; font-size: 0.85rem; font-weight: 700;
+            border: 2px solid transparent; cursor: pointer; font-family: inherit;
+            text-align: center; transition: all 0.15s; background: #f8fafc; color: #1e293b;
+        }
+        .subj-btn:hover    { border-color: #059669; background: #ecfdf5; }
+        .subj-btn.selected { border-color: #059669; background: #dcfce7; color: #065f46; }
+        .subj-btn.depleted { opacity: 0.4; cursor: not-allowed; text-decoration: line-through; }
+        .modal-actions { display: flex; gap: 8px; }
+        .modal-btn {
+            flex: 1; padding: 10px; border-radius: 8px; font-size: 0.9rem; font-weight: 700;
+            border: none; cursor: pointer; font-family: inherit; transition: all 0.15s;
+        }
+        .modal-btn-confirm { background: #059669; color: white; }
+        .modal-btn-confirm:hover    { background: #047857; }
+        .modal-btn-confirm:disabled { background: #d1d5db; cursor: not-allowed; }
+        .modal-btn-noclass { background: #fee2e2; color: #991b1b; }
+        .modal-btn-noclass:hover { background: #fecaca; }
+        .modal-btn-clear   { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+        .modal-btn-clear:hover { background: #e5e7eb; }
+        .modal-btn-cancel  { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+        .modal-btn-cancel:hover { background: #e5e7eb; }
+
+        /* ── Loading ── */
+        .loading-screen {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 60vh; color: #6b7280;
+        }
+        .spinner {
+            width: 44px; height: 44px; border: 3px solid #d1fae5; border-top-color: #059669;
+            border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 600px) {
+            .sched-cell { min-height: 52px; }
+            .cell-subject { font-size: 12px; }
+        }
+        @media print { .toolbar, .swap-banner, .progress-wrap { display: none !important; } }
+    </style>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="header-left">
+        <h1>✏️ 導師排課</h1>
+        <p>填寫自己班級的課表（導師課部分）</p>
+    </div>
+    <div class="header-class-badge" id="classBadge">— 班</div>
+</header>
+
+<!-- Step 1: Choose class -->
+<div id="stepChoose">
+    <div class="loading-screen" id="loadingScreen">
+        <div class="spinner"></div>
+        <div>載入中...</div>
+    </div>
+    <div class="step-choose" id="chooseForm" style="display:none">
+        <div class="choose-card">
+            <h2>👋 歡迎，導師好！</h2>
+            <p>請選擇您的班級，進入課表編輯頁面</p>
+            <select class="choose-select" id="classSelect">
+                <option value="">— 請選擇您的班級 —</option>
+            </select>
+            <button class="enter-btn" id="enterBtn" onclick="enterEditor()" disabled>進入排課 →</button>
+        </div>
+    </div>
+</div>
+
+<!-- Step 2: Editor -->
+<div id="stepEditor" style="display:none">
+    <div class="editor-wrap" id="editorWrap">
+
+        <div class="toolbar">
+            <button class="toolbar-btn btn-green" onclick="saveToFirestore()">☁️ 儲存到雲端</button>
+            <button class="toolbar-btn btn-orange" id="swapModeBtn" onclick="toggleSwapMode()">🔄 調課模式</button>
+            <button class="toolbar-btn btn-gray" onclick="changeClass()">← 換班級</button>
+            <div class="save-status" id="saveStatus">尚未儲存</div>
+        </div>
+
+        <div class="swap-banner" id="swapBanner">
+            🔄 調課模式：先點要移動的格子，再點目標格子。點空白處取消。
+            <button onclick="cancelSwap()" style="margin-left:auto;background:#f97316;color:white;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-weight:700">取消</button>
+        </div>
+
+        <div class="progress-wrap">
+            <div class="progress-header">
+                <span class="progress-title">📊 導師課填寫進度</span>
+                <span class="progress-count" id="progressCount">0 / 0 節</span>
+            </div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+            </div>
+            <div class="subject-chips" id="subjectChips"></div>
+        </div>
+
+        <div class="grid-wrap">
+            <div class="schedule-grid" id="schedGrid"></div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" style="display:none" onclick="handleModalOverlayClick(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+        <div class="modal-title" id="modalTitle">選擇科目</div>
+        <div class="modal-sub"  id="modalSub"></div>
+        <div class="subject-grid" id="subjectGrid"></div>
+        <div class="modal-actions" id="modalActions"></div>
+    </div>
+</div>
+
+<script>
+// ── Firebase ──────────────────────────────────
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.firestore();
+
+// ── Constants ─────────────────────────────────
+const DAYS    = ['一','二','三','四','五'];
+const PERIODS = [1,2,3,4,5,6,7];
+const PERIOD_TIMES = {1:'08:00',2:'08:50',3:'09:50',4:'10:40',5:'13:10',6:'14:00',7:'14:50'};
+
+// ── App State ─────────────────────────────────
+let appData      = null;   // full Firestore payload
+let currentCid   = null;   // selected class id e.g. '101'
+let htId         = null;   // homeroom teacher id
+let swapMode     = false;
+let swapSource   = null;   // { day, period }
+let pendingCell  = null;   // cell context for modal
+let selectedSubj = null;
+
+// ── Boot ─────────────────────────────────────
+async function boot() {
+    try {
+        const snap = await db.doc(FS_DOC_PATH).get();
+        if (!snap.exists) {
+            showError('雲端尚未有課表資料，請等管理員先發布課表後再來編輯。');
+            return;
+        }
+        appData = snap.data();
+        buildClassSelect();
+        document.getElementById('loadingScreen').style.display = 'none';
+        document.getElementById('chooseForm').style.display    = 'block';
+    } catch(e) {
+        showError('載入失敗：' + e.message);
+    }
+}
+
+function showError(msg) {
+    document.getElementById('loadingScreen').innerHTML =
+        `<div style="color:#dc2626;font-weight:700;font-size:1rem;text-align:center;padding:20px">❌ ${msg}</div>`;
+}
+
+// ── Class select ──────────────────────────────
+function buildClassSelect() {
+    const sel = document.getElementById('classSelect');
+    const gc  = appData.gradeConfig || {};
+    for (let g = 1; g <= 6; g++) {
+        const count = gc[g] || 0;
+        if (!count) continue;
+        const grp = document.createElement('optgroup');
+        grp.label = `${g} 年級`;
+        for (let c = 1; c <= count; c++) {
+            const cid = `${g}${String(c).padStart(2,'0')}`;
+            const opt = document.createElement('option');
+            opt.value = cid;
+            opt.textContent = `${cid} 班`;
+            grp.appendChild(opt);
+        }
+        sel.appendChild(grp);
+    }
+    sel.onchange = () => {
+        document.getElementById('enterBtn').disabled = !sel.value;
+    };
+}
+
+function enterEditor() {
+    const sel = document.getElementById('classSelect');
+    if (!sel.value) return;
+    currentCid = sel.value;
+    htId = getHomeroomId(currentCid);
+
+    document.getElementById('stepChoose').style.display = 'none';
+    document.getElementById('stepEditor').style.display = 'block';
+    document.getElementById('classBadge').style.display = 'block';
+    document.getElementById('classBadge').textContent = `${currentCid} 班`;
+
+    renderGrid();
+    updateProgress();
+}
+
+function changeClass() {
+    if (!confirm('離開目前班級？未儲存的變更將會遺失。')) return;
+    currentCid = null; htId = null;
+    swapMode = false; swapSource = null;
+    document.getElementById('stepChoose').style.display = 'block';
+    document.getElementById('stepEditor').style.display = 'none';
+    document.getElementById('classBadge').style.display = 'none';
+    document.getElementById('saveStatus').textContent   = '尚未儲存';
+    document.getElementById('saveStatus').className     = 'save-status';
+}
+
+// ── Helpers ───────────────────────────────────
+function getHomeroomId(cid) {
+    return appData.teachers?.find(t => t.classId === cid)?.id ?? null;
+}
+function getTeacherName(tid) {
+    return appData.teachers?.find(t => t.id == tid)?.name || '';
+}
+function isSystemBlocked(cid, day, period) {
+    if (day === '三' && period >= 5) return true;
+    const g = parseInt(cid.charAt(0));
+    if (g <= 2 && ['一','四','五'].includes(day) && period >= 5) return true;
+    if (g >= 3 && g <= 4 && day === '五' && period >= 5) return true;
+    return false;
+}
+
+// Get subjects the homeroom teacher should fill for this class
+// = all subjects that are NOT assigned to a specialist AND have period count > 0
+function getHomeroomSubjects(cid) {
+    const grade = parseInt(cid.charAt(0));
+    const gsc   = appData.gradeSubjectConfig?.[grade] || {};
+    const result = [];
+    for (const subj in gsc) {
+        const count = gsc[subj] || 0;
+        if (count === 0) continue;
+        const assign = appData.assignments?.[cid]?.[subj];
+        const isSpecialist = assign?.primary && assign.primary != htId;
+        if (!isSpecialist) result.push({ subj, total: count });
+    }
+    return result;
+}
+
+// Count how many times a subject appears for homeroom in schedule
+function countPlaced(cid, subj) {
+    const schedule = appData.schedule || {};
+    let n = 0;
+    for (const d of DAYS) {
+        for (const p of PERIODS) {
+            const cell = schedule[cid]?.[d]?.[p];
+            if (cell && cell.subject === subj && cell.teacherId == htId) n++;
+        }
+    }
+    return n;
+}
+
+function cellBgClass(subject) {
+    const known = ['國語','數學','英語','社會','自然','生活','體育','藝文','健康','本土','綜合'];
+    return known.includes(subject) ? `sc-${subject}` : 'sc-other';
+}
+
+// ── Grid render ───────────────────────────────
+function renderGrid() {
+    const grid = document.getElementById('schedGrid');
+    grid.innerHTML = '';
+
+    const schedule = appData.schedule || {};
+
+    // Header row
+    const corner = el('div', 'grid-head corner', '節');
+    grid.appendChild(corner);
+    DAYS.forEach(d => grid.appendChild(el('div','grid-head',`週${d}`)));
+
+    // Period rows
+    PERIODS.forEach(p => {
+        // Period label cell
+        const pc = document.createElement('div');
+        pc.className = 'period-cell';
+        pc.innerHTML = `<span class="period-num">${p}</span><span class="period-time">${PERIOD_TIMES[p]}</span>`;
+        grid.appendChild(pc);
+
+        DAYS.forEach(d => {
+            const cell = document.createElement('div');
+            cell.id = cellId(d, p);
+            renderCell(cell, d, p, schedule[currentCid]?.[d]?.[p]);
+            grid.appendChild(cell);
+        });
+    });
+}
+
+function renderCell(cellEl, d, p, data) {
+    cellEl.className = 'sched-cell';
+    cellEl.innerHTML = '';
+    cellEl.onclick   = null;
+
+    // System blocked
+    if (isSystemBlocked(currentCid, d, p)) {
+        cellEl.classList.add('sys-blocked');
+        return;
+    }
+
+    // Filled by specialist
+    if (data && data.type === 'course' && data.teacherId != htId) {
+        cellEl.classList.add('locked');
+        const tName = getTeacherName(data.teacherId);
+        cellEl.innerHTML = `
+            <span class="locked-badge">科任</span>
+            <span class="cell-subject ${cellBgClass(data.subject)}" style="padding:2px 6px;border-radius:6px">${data.subject}</span>
+            <span class="cell-sub">${tName}</span>`;
+        return;
+    }
+
+    // Marked as no-class (block)
+    if (data && data.type === 'block') {
+        cellEl.classList.add('no-class');
+        cellEl.innerHTML = `<span class="cell-no-class">空堂 / 不排</span>`;
+        cellEl.onclick = () => handleCellClick(d, p);
+        return;
+    }
+
+    // Filled by homeroom
+    if (data && data.type === 'course' && data.teacherId == htId) {
+        cellEl.classList.add('homeroom-filled', cellBgClass(data.subject));
+        cellEl.innerHTML = `
+            <span class="cell-subject">${data.subject}</span>
+            <span class="cell-sub">導師</span>`;
+        cellEl.onclick = () => handleCellClick(d, p);
+        return;
+    }
+
+    // Empty — editable
+    cellEl.classList.add('editable-empty');
+    cellEl.innerHTML = `<span class="cell-add-icon">＋</span><span class="cell-empty-hint">點擊填入</span>`;
+    cellEl.onclick = () => handleCellClick(d, p);
+}
+
+function refreshCell(d, p) {
+    const schedule = appData.schedule || {};
+    const el = document.getElementById(cellId(d, p));
+    if (el) renderCell(el, d, p, schedule[currentCid]?.[d]?.[p]);
+}
+
+function cellId(d, p) { return `cell-${d}-${p}`; }
+function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    e.className = cls;
+    e.textContent = text;
+    return e;
+}
+
+// ── Swap mode ─────────────────────────────────
+function toggleSwapMode() {
+    swapMode = !swapMode;
+    swapSource = null;
+    const btn = document.getElementById('swapModeBtn');
+    const banner = document.getElementById('swapBanner');
+    btn.textContent = swapMode ? '🔄 結束調課' : '🔄 調課模式';
+    btn.style.background = swapMode ? '#ea580c' : '';
+    banner.style.display  = swapMode ? 'flex' : 'none';
+    // Re-render to clear highlights
+    renderGrid();
+}
+
+function cancelSwap() {
+    swapSource = null;
+    renderGrid();
+    document.getElementById('schedGrid').querySelectorAll('.swap-source,.swap-target').forEach(e => {
+        e.classList.remove('swap-source','swap-target');
+    });
+}
+
+// ── Cell click handler ────────────────────────
+function handleCellClick(d, p) {
+    const schedule = appData.schedule || {};
+    const data = schedule[currentCid]?.[d]?.[p];
+    const isSpecialist = data && data.type === 'course' && data.teacherId != htId;
+    if (isSpecialist) return; // locked
+
+    // Swap mode logic
+    if (swapMode) {
+        if (!swapSource) {
+            // Must pick a filled homeroom cell as source
+            if (!data || data.type === 'block') {
+                alert('請先點選一個已填寫的導師課格子作為來源。');
+                return;
+            }
+            swapSource = { d, p };
+            document.getElementById(cellId(d,p)).classList.add('swap-source');
+            // Highlight valid targets
+            DAYS.forEach(td => PERIODS.forEach(tp => {
+                if (td === d && tp === p) return;
+                if (isSystemBlocked(currentCid, td, tp)) return;
+                const tData = schedule[currentCid]?.[td]?.[tp];
+                if (tData && tData.teacherId != htId) return; // specialist locked
+                const tEl = document.getElementById(cellId(td, tp));
+                if (tEl) tEl.classList.add('swap-target');
+            }));
+        } else {
+            // Execute swap
+            doSwap(swapSource.d, swapSource.p, d, p);
+            swapSource = null;
+            renderGrid();
+        }
+        return;
+    }
+
+    // Normal mode: open modal
+    openModal(d, p, data);
+}
+
+function doSwap(d1, p1, d2, p2) {
+    if (!appData.schedule) appData.schedule = {};
+    if (!appData.schedule[currentCid]) appData.schedule[currentCid] = {};
+    const s = appData.schedule[currentCid];
+    if (!s[d1]) s[d1] = {};
+    if (!s[d2]) s[d2] = {};
+    const a = s[d1][p1];
+    const b = s[d2][p2];
+    if (b) s[d1][p1] = b; else delete s[d1][p1];
+    if (a) s[d2][p2] = a; else delete s[d2][p2];
+    updateProgress();
+    setSaveStatus('edited');
+}
+
+// ── Modal ─────────────────────────────────────
+function openModal(d, p, data) {
+    pendingCell  = { d, p };
+    selectedSubj = data?.type === 'course' ? data.subject : null;
+
+    const isHomeroom = data && data.type === 'course' && data.teacherId == htId;
+    const isBlock    = data && data.type === 'block';
+
+    document.getElementById('modalTitle').textContent =
+        `週${d} 第${p}節`;
+    document.getElementById('modalSub').textContent =
+        isHomeroom ? `目前：${data.subject}（點選更換科目）`
+        : isBlock  ? '目前：空堂 / 不排'
+        : '選擇要填入的科目';
+
+    // Build subject buttons
+    const hSubjects = getHomeroomSubjects(currentCid);
+    const grid = document.getElementById('subjectGrid');
+    grid.innerHTML = '';
+    hSubjects.forEach(({ subj, total }) => {
+        const placed = countPlaced(currentCid, subj);
+        // Don't count current cell if it's already this subject
+        const adjustedPlaced = (isHomeroom && data.subject === subj) ? placed - 1 : placed;
+        const remaining = total - adjustedPlaced;
+        const depleted  = remaining <= 0;
+
+        const btn = document.createElement('button');
+        btn.className = 'subj-btn' + (depleted ? ' depleted' : '') + (subj === selectedSubj ? ' selected' : '');
+        btn.disabled  = depleted;
+        btn.innerHTML = `${subj}<br><span style="font-size:9px;font-weight:400;opacity:0.7">剩 ${Math.max(0,remaining)} 節</span>`;
+        btn.onclick   = () => {
+            selectedSubj = subj;
+            grid.querySelectorAll('.subj-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        };
+        grid.appendChild(btn);
+    });
+
+    // Actions
+    const actions = document.getElementById('modalActions');
+    actions.innerHTML = '';
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'modal-btn modal-btn-confirm';
+    confirmBtn.textContent = '✅ 確定';
+    confirmBtn.onclick = () => {
+        if (!selectedSubj) return;
+        setCell(pendingCell.d, pendingCell.p, 'course', selectedSubj);
+        closeModal();
+    };
+
+    const noClassBtn = document.createElement('button');
+    noClassBtn.className = 'modal-btn modal-btn-noclass';
+    noClassBtn.textContent = '空堂';
+    noClassBtn.onclick = () => {
+        setCell(pendingCell.d, pendingCell.p, 'block', null);
+        closeModal();
+    };
+
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'modal-btn modal-btn-clear';
+    clearBtn.textContent = '清除';
+    clearBtn.onclick = () => {
+        clearCell(pendingCell.d, pendingCell.p);
+        closeModal();
+    };
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'modal-btn modal-btn-cancel';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = closeModal;
+
+    if (isHomeroom || isBlock) {
+        actions.append(confirmBtn, noClassBtn, clearBtn, cancelBtn);
+    } else {
+        actions.append(confirmBtn, noClassBtn, cancelBtn);
+    }
+
+    document.getElementById('modal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('modal').style.display = 'none';
+    selectedSubj = null;
+    pendingCell  = null;
+}
+
+function handleModalOverlayClick(e) {
+    if (e.target === document.getElementById('modal')) closeModal();
+}
+
+// ── Data mutation ─────────────────────────────
+function ensureSchedulePath(cid, d) {
+    if (!appData.schedule) appData.schedule = {};
+    if (!appData.schedule[cid]) appData.schedule[cid] = {};
+    if (!appData.schedule[cid][d]) appData.schedule[cid][d] = {};
+}
+
+function setCell(d, p, type, subject) {
+    ensureSchedulePath(currentCid, d);
+    appData.schedule[currentCid][d][p] = {
+        type,
+        subject: subject || null,
+        teacherId: type === 'course' ? htId : null,
+    };
+    refreshCell(d, p);
+    updateProgress();
+    setSaveStatus('edited');
+}
+
+function clearCell(d, p) {
+    if (appData.schedule?.[currentCid]?.[d]) {
+        const copy = { ...appData.schedule[currentCid][d] };
+        delete copy[p];
+        appData.schedule[currentCid][d] = copy;
+    }
+    refreshCell(d, p);
+    updateProgress();
+    setSaveStatus('edited');
+}
+
+// ── Progress ──────────────────────────────────
+function updateProgress() {
+    const hSubjects = getHomeroomSubjects(currentCid);
+    let totalNeeded = 0, totalPlaced = 0;
+    const chips = [];
+
+    hSubjects.forEach(({ subj, total }) => {
+        const placed = countPlaced(currentCid, subj);
+        totalNeeded += total;
+        totalPlaced += Math.min(placed, total);
+        const cls = placed >= total ? 'chip-done' : placed > 0 ? 'chip-partial' : 'chip-empty';
+        chips.push(`<span class="subject-chip ${cls}">${subj} ${placed}/${total}</span>`);
+    });
+
+    const pct = totalNeeded ? Math.round(totalPlaced / totalNeeded * 100) : 0;
+    document.getElementById('progressCount').textContent = `${totalPlaced} / ${totalNeeded} 節`;
+    document.getElementById('progressFill').style.width  = `${pct}%`;
+    document.getElementById('subjectChips').innerHTML    = chips.join('');
+}
+
+// ── Save ──────────────────────────────────────
+function setSaveStatus(state) {
+    const el = document.getElementById('saveStatus');
+    if (state === 'edited') { el.textContent = '有未儲存的變更'; el.className = 'save-status err'; }
+    else if (state === 'saving') { el.textContent = '儲存中...'; el.className = 'save-status'; }
+    else if (state === 'ok') { el.textContent = '✅ 已儲存到雲端'; el.className = 'save-status ok'; }
+    else if (state === 'error') { el.textContent = '❌ 儲存失敗'; el.className = 'save-status err'; }
+}
+
+async function saveToFirestore() {
+    setSaveStatus('saving');
+    try {
+        await db.doc(FS_DOC_PATH).update({
+            schedule: appData.schedule,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+        setSaveStatus('ok');
+    } catch(e) {
+        setSaveStatus('error');
+        alert('❌ 儲存失敗：' + e.message);
+    }
+}
+
+// ── Start ─────────────────────────────────────
+boot();
+</script>
+</body>
+</html>
