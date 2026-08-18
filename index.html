@@ -1382,7 +1382,8 @@ createApp({
                     });
                 }
                 teachers.value = newTeachers;
-                alert('匯入成功！');
+                saveData();
+                alert('匯入成功！記得按右下角「立即儲存」把資料寫回雲端。');
             };
             reader.readAsText(file, 'utf-8');
         }
@@ -1415,16 +1416,15 @@ createApp({
             }
         }
 
+        // saveData: 現在改成「不自動存雲端」，只標記本機有未存檔的變更。
+        // 真正寫入 Firestore 只會在使用者按右下角「立即儲存」按鈕（saveNow）時才發生。
+        // 這樣可以避免自動儲存/背景輪詢互相打架，也讓使用者清楚知道「按了才會存」。
         function saveData() {
-            hasUnsavedChanges.value = true; // 標記為「有變更尚未存檔」，暫停背景輪詢覆蓋
-            if (saveData._timer) clearTimeout(saveData._timer);
-            saveData._timer = setTimeout(writeToCloud, 800); // debounce 800ms，避免連續操作打太多請求
+            hasUnsavedChanges.value = true;
         }
 
-        // 手動「立即儲存」：跳過 debounce，馬上寫入雲端。給右下角浮動按鈕使用，
-        // 讓使用者在編輯到一個段落時可以主動確保資料已經存進 Firestore。
+        // 手動「立即儲存」：真正寫入雲端。給右下角浮動按鈕使用。
         async function saveNow() {
-            if (saveData._timer) clearTimeout(saveData._timer);
             await writeToCloud();
         }
 
@@ -1616,8 +1616,15 @@ createApp({
 
         onMounted(async () => {
             await loadFromCloud();
-            // 每 5 秒背景靜默更新（不打斷操作）
+            // 每 5 秒背景靜默更新（不打斷操作，且會跳過本機有未存檔變更的情況）
             setInterval(() => loadFromCloud(true), 5000);
+            // 離開/關閉分頁前，如果還有未存檔的變更，跳出瀏覽器原生確認視窗提醒使用者
+            window.addEventListener('beforeunload', (e) => {
+                if (hasUnsavedChanges.value) {
+                    e.preventDefault();
+                    e.returnValue = '';
+                }
+            });
         });
 
         // ── RETURN ────────────────────────────────────────────────
