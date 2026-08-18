@@ -158,9 +158,9 @@
             <div class="flex items-center gap-4 flex-wrap">
                 <h1 class="text-xl font-bold text-yellow-400">🏫 排課系統</h1>
                 <div class="flex bg-gray-900 rounded p-1 gap-1">
-                    <button v-for="space in workspaces" :key="space.id" @click="selectWorkspace(space.id)"
+                    <a v-for="space in workspaces" :key="space.id" :href="space.href"
                         :class="currentWorkspace === space.id ? 'bg-yellow-500 text-black font-bold' : 'text-gray-300 hover:bg-gray-600'"
-                        class="px-3 py-1 rounded text-sm transition">{{ space.name }}</button>
+                        class="px-3 py-1 rounded text-sm transition no-underline">{{ space.name }}</a>
                 </div>
                 <nav class="flex bg-gray-700 rounded p-1 gap-1 flex-wrap">
                     <button v-for="tab in workspaceTabs" :key="tab.id"
@@ -894,9 +894,9 @@ createApp({
         const dragTeacherIdx = ref(null);
         const dragOverTeacherIdx = ref(null);
         const workspaces = [
-            { id: 'setup', name: '排課前設定' },
-            { id: 'scheduling', name: '電腦排課' },
-            { id: 'reporting', name: '統計與列印' },
+            { id: 'setup', name: '排課前設定', href: 'setup.html' },
+            { id: 'scheduling', name: '電腦排課', href: 'scheduler.html' },
+            { id: 'reporting', name: '統計與列印', href: 'reports.html' },
         ];
         const tabs = [
             { id:'settings',         name:'01.基礎設定', workspace:'setup' },
