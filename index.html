@@ -252,7 +252,7 @@
                             <th class="p-2 border w-10 text-center">學年<br>主任</th>
                             <th class="p-2 border">職稱備註</th>
                             <th class="p-2 border w-16 bg-blue-50">基本</th>
-                            <th class="p-2 border w-24 bg-red-100">減(-)</th>
+                            <th class="p-2 border w-24 bg-red-100">減(填正數)</th>
                             <th class="p-2 border w-24 bg-green-100">超(+)</th>
                             <th class="p-2 border w-16 font-bold">應授</th>
                             <th class="p-2 border w-32">已配 / 應授</th>
@@ -273,7 +273,7 @@
                             <td class="p-1 text-center"><input type="checkbox" v-model="t.isGradeDirector" @change="saveData" class="w-4 h-4"></td>
                             <td class="p-1"><input v-model="t.title_note" @change="saveData" class="w-full border rounded p-1 text-xs"></td>
                             <td class="p-1 bg-blue-50"><input type="number" v-model.number="t.baseLoad" @change="saveData" class="w-full text-center border rounded p-1"></td>
-                            <td class="p-1 bg-red-100"><input type="number" v-model.number="t.reduction" @change="saveData" max="0" class="w-full text-center border rounded p-1 text-red-600 font-bold"></td>
+                            <td class="p-1 bg-red-100"><input type="number" v-model.number="t.reduction" @change="saveData" min="0" class="w-full text-center border rounded p-1 text-red-600 font-bold"></td>
                             <td class="p-1 bg-green-100"><input type="number" v-model.number="t.overtime" @change="saveData" min="0" class="w-full text-center border rounded p-1 text-green-600 font-bold"></td>
                             <td class="p-1 text-center font-bold text-lg">{{ calculateTargetLoad(t) }}</td>
                             <td class="p-2 text-xs text-center font-bold" :class="{'bg-green-500 text-white': getTeacherLoad(t.id) === calculateTargetLoad(t), 'bg-red-100 text-red-600': getTeacherLoad(t.id) > calculateTargetLoad(t)}">
@@ -1077,7 +1077,7 @@ createApp({
             }
             return count;
         }
-        function calculateTargetLoad(t) { return (t.baseLoad||0) + (t.reduction||0) + (t.overtime||0); }
+        function calculateTargetLoad(t) { return (t.baseLoad||0) - (t.reduction||0) + (t.overtime||0); }
 
         // ── 5. BLOCK / CONSTRAINT HELPERS ────────────────────────
         function isSystemBlocked(cid, day, period) {
@@ -1549,7 +1549,7 @@ createApp({
 
         const filteredStatsTeachers = computed(() => teachers.value.filter(t => {
             if (statsFilter.value === 'all')      return true;
-            if (statsFilter.value === 'reduced')  return (t.reduction || 0) < 0;
+            if (statsFilter.value === 'reduced')  return (t.reduction || 0) > 0;
             if (statsFilter.value === 'overtime')  return (t.overtime  || 0) > 0;
             return true;
         }));
