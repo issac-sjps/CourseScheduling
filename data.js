@@ -105,7 +105,7 @@ function getDefaultTeachers(gradeConfig) {
     for (let i = 1; i <= 4; i++)
         list.push({ id: tid++, name: `主任${i}`, role: '主任', classId: '', title_note: `教務主任${i}`, baseLoad: 1, reduction: 0, overtime: 0, priority: 10, constraints: [], isGradeDirector: false });
     for (let i = 1; i <= 9; i++)
-        list.push({ id: tid++, name: `組長${i}`, role: '組長', classId: '', title_note: `教學組長${i}`, baseLoad: 11, reduction: 0, overtime: 0, priority: 10, constraints: [], isGradeDirector: false });
+        list.push({ id: tid++, name: `組長${i}`, role: '組長', classId: '', title_note: `教學組長${i}`, baseLoad: 9, reduction: 0, overtime: 0, priority: 10, constraints: [], isGradeDirector: false });
     for (let i = 1; i <= 13; i++)
         list.push({ id: tid++, name: `科任${i}`, role: '科任', classId: '', title_note: '專長', baseLoad: 20, reduction: 0, overtime: 0, priority: 10, constraints: [], isGradeDirector: false });
     for (let g = 1; g <= 6; g++) {
