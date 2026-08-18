@@ -230,8 +230,12 @@
         <div v-show="currentTab === 'teachers'" class="bg-white p-4 rounded shadow no-print">
             <div class="flex justify-between items-center mb-2">
                 <h3 class="font-bold text-lg">👩‍🏫 02. 教師資料</h3>
-                <div class="flex gap-2">
+                <div class="flex gap-2 items-center">
                     <button @click="exportTeacherCSV" class="btn btn-purple text-xs">📥 下載 CSV</button>
+                    <label class="flex items-center gap-1 text-xs bg-gray-100 border rounded px-2 py-1 cursor-pointer" title="勾選後，匯入時不會嘗試比對舊 ID，全部視為新老師，並會清空目前的配課設定與課表，避免對到錯的人。">
+                        <input type="checkbox" v-model="csvImportAsFresh">
+                        全新匯入(清空配課/課表)
+                    </label>
                     <label class="btn btn-orange text-xs cursor-pointer">📤 匯入 CSV
                         <input type="file" @change="importTeacherCSV" class="hidden" accept=".csv">
                     </label>
@@ -855,6 +859,8 @@ createApp({
         // 用途：(1) 背景 5 秒輪詢時，若本機還有未存檔的變更就先跳過，避免把使用者正在編輯的內容覆蓋掉。
         //       (2) 右下角浮動「立即儲存」按鈕會依此顯示提醒動畫，讓使用者可以手動確保存檔。
         const hasUnsavedChanges = ref(false);
+        // 匯入 CSV 時是否「視為全新名單」：勾選後不比對舊 ID，全部當新老師，並清空配課/課表，避免誤接到錯的人。
+        const csvImportAsFresh = ref(false);
         const tabs = [
             { id:'settings',          name:'01.基礎設定'    },
             { id:'teachers',          name:'02.教師管理'    },
@@ -1346,10 +1352,10 @@ createApp({
 
         // ── 12. CSV IMPORT / EXPORT ──────────────────────────────
         function exportTeacherCSV() {
-            const header = '\uFEFF姓名,身分,負責班級,職稱備註,基本節數,減課,超鐘點,學年主任,權重\n';
-            // FIX: include isGradeDirector and priority
+            const header = '\uFEFF姓名,身分,負責班級,職稱備註,基本節數,減課,超鐘點,學年主任,權重,ID,限制時段\n';
+            // FIX: include isGradeDirector and priority, and now id + constraints so re-import doesn't break assignments/schedule
             const rows = teachers.value.map(t =>
-                `${t.name},${t.role},${t.classId||''},${t.title_note||''},${t.baseLoad},${t.reduction},${t.overtime},${t.isGradeDirector?1:0},${t.priority||10}`
+                `${t.name},${t.role},${t.classId||''},${t.title_note||''},${t.baseLoad},${t.reduction},${t.overtime},${t.isGradeDirector?1:0},${t.priority||10},${t.id},${(t.constraints||[]).join(';')}`
             ).join('\n');
             const a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([header + rows], { type: 'text/csv;charset=utf-8;' }));
@@ -1358,18 +1364,31 @@ createApp({
         }
         function importTeacherCSV(e) {
             const file = e.target.files[0];
-            if (!file || !confirm('覆蓋現有教師資料？')) return;
+            const isFresh = csvImportAsFresh.value;
+            const confirmMsg = isFresh
+                ? '確定要「全新匯入」嗎？這會清空目前的配課設定與課表，全部老師視為新名單！'
+                : '覆蓋現有教師資料？（若 CSV 帶有原本的 ID，配課與課表會自動對應保留）';
+            if (!file || !confirm(confirmMsg)) return;
             const reader = new FileReader();
             reader.onload = (ev) => {
                 const lines = ev.target.result.split('\n');
+                const existingIds = new Set(teachers.value.map(t => t.id));
+                let nextNewId = Date.now();
                 const newTeachers = [];
-                let tid = 1;
                 for (let i = 1; i < lines.length; i++) {
-                    const cols = lines[i].split(',');
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    const cols = line.split(',');
                     if (cols.length < 2) continue;
-                    // FIX: preserve all fields
+                    const csvId = cols[9]?.trim();
+                    // 只有當 CSV 裡的 id 跟目前系統裡某位老師的 id 完全對得上時，才沿用該 id，
+                    // 這樣配課(assignments)和課表(scheduleData)裡存的 teacherId 才不會失聯。
+                    // 對不上（例如全新老師、或 id 欄位是空的）就給一個新的、保證不重複的 id。
+                    // 若勾選「全新匯入」，則完全不比對，一律當新老師處理。
+                    const normalizedCsvId = csvId && !isNaN(csvId) ? Number(csvId) : csvId;
+                    const id = (!isFresh && normalizedCsvId && existingIds.has(normalizedCsvId)) ? normalizedCsvId : nextNewId++;
                     newTeachers.push({
-                        id: tid++,
+                        id,
                         name: cols[0].trim(),
                         role: cols[1].trim(),
                         classId: cols[2]?.trim() || '',
@@ -1379,12 +1398,20 @@ createApp({
                         overtime: parseInt(cols[6]) || 0,
                         isGradeDirector: cols[7]?.trim() === '1',
                         priority: parseInt(cols[8]) || 10,
-                        constraints: [],
+                        constraints: cols[10]?.trim() ? cols[10].trim().split(';').filter(Boolean) : [],
                     });
                 }
                 teachers.value = newTeachers;
+                if (isFresh) {
+                    // 全新匯入：清空所有跟舊教師 ID 有關聯的資料，避免殘留指向錯的人
+                    assignments.value    = {};
+                    scheduleData.value   = {};
+                    teacherTargets.value = {};
+                }
                 saveData();
-                alert('匯入成功！記得按右下角「立即儲存」把資料寫回雲端。');
+                alert(isFresh
+                    ? '✅ 已全新匯入！配課與課表已清空，請重新設定配課。記得按右下角「立即儲存」。'
+                    : '匯入成功！記得按右下角「立即儲存」把資料寫回雲端。\n（若 CSV 裡有帶原本的 ID，配課與課表對應的老師會自動保留；沒有對到 ID 的則視為新老師。）');
             };
             reader.readAsText(file, 'utf-8');
         }
@@ -1654,7 +1681,7 @@ createApp({
             addTeacher, regenerateTeachers, resetAllData,
             exportTeacherCSV, importTeacherCSV,
             saveData, saveNow, doPrint,
-            syncStatus, syncLabel, hasUnsavedChanges,
+            syncStatus, syncLabel, hasUnsavedChanges, csvImportAsFresh,
         };
     }
 }).mount('#app');
