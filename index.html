@@ -281,7 +281,7 @@
                                     </div>
                                 </div>
                             </td>
-                            <td class="p-1 text-center"><button @click="teachers.splice(idx,1)" class="text-red-500 font-bold">x</button></td>
+                            <td class="p-1 text-center"><button @click="teachers.splice(idx,1); saveData()" class="text-red-500 font-bold">x</button></td>
                         </tr>
                     </tbody>
                 </table>
@@ -1316,6 +1316,7 @@ createApp({
         // ── 11. TEACHER HELPERS ──────────────────────────────────
         function addTeacher() {
             teachers.value.push({ id: Date.now(), name: '新師', role: '科任', classId: '', baseLoad: 20, priority: 10, constraints: [], isGradeDirector: false });
+            saveData();
         }
         function regenerateTeachers() {
             if (confirm('重置導師名單？')) {
