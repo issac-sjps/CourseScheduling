@@ -204,18 +204,21 @@ let queryMode = 'class'; // 'class' | 'teacher'
 // ── 載入 Firestore 資料 ──────────────────────
 async function loadData() {
     try {
-        const snap = await db.doc(FS_DOC_PATH).get();
-        if (!snap.exists) {
-            document.getElementById('scheduleCard').innerHTML =
-                '<div class="empty-hint">☁️ 雲端尚未有課表資料，請等管理員發布後再來查詢。</div>';
-            document.getElementById('lastUpdated').textContent = '尚未有資料';
-            return;
-        }
-        appData = snap.data();
+        const [configSnap, teacherSnap, scheduleSnap] = await Promise.all([
+            db.collection(FS_COLLECTIONS.config).doc(FS_CONFIG_DOC).get(),
+            db.collection(FS_COLLECTIONS.teachers).get(),
+            db.collection(FS_COLLECTIONS.schedules).get(),
+        ]);
+        const config = configSnap.exists ? configSnap.data() : {};
+        appData = {
+            ...config,
+            teachers: teacherSnap.docs.map(doc => ({ id: Number(doc.id), ...doc.data() })),
+            schedule: Object.fromEntries(scheduleSnap.docs.map(doc => [doc.id, doc.data().schedule || {}])),
+        };
 
         // 顯示更新時間
-        if (appData.updatedAt) {
-            const d = appData.updatedAt.toDate();
+        if (config.updatedAt) {
+            const d = config.updatedAt.toDate();
             document.getElementById('lastUpdated').textContent =
                 '最後更新：' + d.toLocaleString('zh-TW');
         }

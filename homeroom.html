@@ -326,12 +326,22 @@ let selectedSubj = null;
 // ── Boot ─────────────────────────────────────
 async function boot() {
     try {
-        const snap = await db.doc(FS_DOC_PATH).get();
-        if (!snap.exists) {
-            showError('雲端尚未有課表資料，請等管理員先發布課表後再來編輯。');
+        const [configSnap, teacherSnap, assignmentSnap, scheduleSnap] = await Promise.all([
+            db.collection(FS_COLLECTIONS.config).doc(FS_CONFIG_DOC).get(),
+            db.collection(FS_COLLECTIONS.teachers).get(),
+            db.collection(FS_COLLECTIONS.assignments).get(),
+            db.collection(FS_COLLECTIONS.schedules).get(),
+        ]);
+        if (!configSnap.exists) {
+            showError('尚未完成管理端設定，請先由管理員儲存基本資料。');
             return;
         }
-        appData = snap.data();
+        appData = {
+            ...configSnap.data(),
+            teachers: teacherSnap.docs.map(doc => ({ id: Number(doc.id), ...doc.data() })),
+            assignments: Object.fromEntries(assignmentSnap.docs.map(doc => [doc.id, doc.data().assignments || {}])),
+            schedule: Object.fromEntries(scheduleSnap.docs.map(doc => [doc.id, doc.data().schedule || {}])),
+        };
         buildClassSelect();
         document.getElementById('loadingScreen').style.display = 'none';
         document.getElementById('chooseForm').style.display    = 'block';
@@ -758,10 +768,10 @@ function setSaveStatus(state) {
 async function saveToFirestore() {
     setSaveStatus('saving');
     try {
-        await db.doc(FS_DOC_PATH).update({
-            schedule: appData.schedule,
+        await db.collection(FS_COLLECTIONS.schedules).doc(currentCid).set({
+            schedule: appData.schedule[currentCid] || {},
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        });
+        }, { merge: true });
         setSaveStatus('ok');
     } catch(e) {
         setSaveStatus('error');

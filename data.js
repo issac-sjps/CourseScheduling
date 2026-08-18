@@ -16,8 +16,15 @@ const FIREBASE_CONFIG = {
     measurementId: "G-CEK1EKWL9Q"
 };
 
-// Firestore 文件路徑（所有資料存在同一份文件）
-const FS_DOC_PATH = 'schedule/main';
+// Firestore 正規化資料結構。
+// 設定、教師、每班配課與每班課表分開儲存，避免任一操作都讀寫整校資料。
+const FS_COLLECTIONS = {
+    config: 'schedule_config',
+    teachers: 'schedule_teachers',
+    assignments: 'schedule_assignments',
+    schedules: 'schedule_class_schedules',
+};
+const FS_CONFIG_DOC = 'main';
 
 const SUBJECTS = [
     { zh: '國語',   alias: '部定' },
