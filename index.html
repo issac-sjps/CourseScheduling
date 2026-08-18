@@ -395,10 +395,12 @@
                         <div class="w-12 font-bold text-sm">{{ g }}年</div>
                         <div class="flex-1 flex flex-wrap gap-2">
                             <div v-for="cls in getClassListByGrade(g)" :key="cls.id"
-                                @click="toggleTeacherClass(cls.id, g)"
+                                @click="isTakenByOther(cls.id, batchSubject, batchTeacherId) ? null : toggleTeacherClass(cls.id, g)"
                                 class="class-btn w-16"
-                                :class="{'active': getAssignment(cls.id, batchSubject).primary == batchTeacherId, 'disabled': getPeriodCount(g, batchSubject) === 0}">
+                                :class="{'active': getAssignment(cls.id, batchSubject).primary == batchTeacherId, 'disabled': getPeriodCount(g, batchSubject) === 0 || isTakenByOther(cls.id, batchSubject, batchTeacherId)}"
+                                :title="isTakenByOther(cls.id, batchSubject, batchTeacherId) ? ('已由 ' + getTeacherName(getAssignment(cls.id, batchSubject).primary) + ' 任教，不可重複配課') : ''">
                                 <div class="font-bold text-xs">{{ cls.name }}</div>
+                                <div v-if="isTakenByOther(cls.id, batchSubject, batchTeacherId)" class="text-[9px] text-gray-400 leading-none">{{ getTeacherName(getAssignment(cls.id, batchSubject).primary) }}</div>
                             </div>
                         </div>
                     </div>
@@ -440,10 +442,12 @@
                             <div class="font-bold text-gray-500 text-xs mb-1">{{ g }}年級 (預設{{ getPeriodCount(g, activeMatrixCell.subj) }}節)</div>
                             <div class="flex flex-wrap gap-2">
                                 <div v-for="cls in getClassListByGrade(g)" :key="cls.id"
-                                    @click="toggleTeacherClass(cls.id, g, activeMatrixCell.subj, activeMatrixCell.tid)"
+                                    @click="isTakenByOther(cls.id, activeMatrixCell.subj, activeMatrixCell.tid) ? null : toggleTeacherClass(cls.id, g, activeMatrixCell.subj, activeMatrixCell.tid)"
                                     class="class-btn"
-                                    :class="{'active': getAssignment(cls.id, activeMatrixCell.subj).primary == activeMatrixCell.tid, 'disabled': getPeriodCount(g, activeMatrixCell.subj) === 0}">
+                                    :class="{'active': getAssignment(cls.id, activeMatrixCell.subj).primary == activeMatrixCell.tid, 'disabled': getPeriodCount(g, activeMatrixCell.subj) === 0 || isTakenByOther(cls.id, activeMatrixCell.subj, activeMatrixCell.tid)}"
+                                    :title="isTakenByOther(cls.id, activeMatrixCell.subj, activeMatrixCell.tid) ? ('已由 ' + getTeacherName(getAssignment(cls.id, activeMatrixCell.subj).primary) + ' 任教') : ''">
                                     <span>{{ cls.name }}</span>
+                                    <span v-if="isTakenByOther(cls.id, activeMatrixCell.subj, activeMatrixCell.tid)" class="text-[9px] text-gray-400 ml-1">({{ getTeacherName(getAssignment(cls.id, activeMatrixCell.subj).primary) }})</span>
                                     <div v-if="getAssignment(cls.id, activeMatrixCell.subj).primary == activeMatrixCell.tid" class="flex gap-1 ml-1" @click.stop>
                                         <button @click="adjustPeriodOverride(cls.id, activeMatrixCell.subj, -1)" class="mini-btn">-</button>
                                         <span class="text-white font-mono text-[10px]">{{ getEffectivePeriod(cls.id, activeMatrixCell.subj) }}</span>
@@ -1022,6 +1026,12 @@ createApp({
             if (!subj) subj = batchSubject.value;
             const assign = getAssignment(cid, subj);
             setAssignment(cid, subj, 'primary', assign.primary == tid ? getHomeroomTeacherId(cid) : tid);
+        }
+        // 這個班/科目是否已經被「別的科任老師」綁走了（用來在教師視角/總量配課反灰，避免同一堂課被重複配課）
+        // 只要目前的 primary 不是「這位老師本人」也不是「導師預設」，就代表已經被別人佔用了
+        function isTakenByOther(cid, subj, tid) {
+            const assign = getAssignment(cid, subj);
+            return assign.primary != tid && assign.primary != getHomeroomTeacherId(cid);
         }
         function getAssignedClassesForTeacher(tid, subj) {
             return Object.keys(assignments.value)
@@ -1725,7 +1735,7 @@ createApp({
             getClassName, getSubjectsForGrade, getClassListByGrade, getTeachersByRoleGroup,
             getAssignment, setAssignment, getEffectivePeriod, adjustPeriodOverride,
             isExplicitAssignment, unlockAssignment,
-            toggleTeacherClass, getAssignedClassesForTeacher,
+            toggleTeacherClass, getAssignedClassesForTeacher, isTakenByOther,
             getTeacherTarget, getRealAssignedCount,
             getTeacherLoad, calculateTargetLoad, getPlacedCount, getTotalAssigned,
             isSystemBlocked, isTeacherBlocked,
