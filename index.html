@@ -1352,10 +1352,10 @@ createApp({
 
         // ── 12. CSV IMPORT / EXPORT ──────────────────────────────
         function exportTeacherCSV() {
-            const header = '\uFEFF姓名,身分,負責班級,職稱備註,基本節數,減課,超鐘點,學年主任,權重,ID,限制時段\n';
+            const header = '\uFEFF姓名,身分,負責班級,職稱備註,基本節數,超鐘點,減課,學年主任,權重,ID,限制時段\n';
             // FIX: include isGradeDirector and priority, and now id + constraints so re-import doesn't break assignments/schedule
             const rows = teachers.value.map(t =>
-                `${t.name},${t.role},${t.classId||''},${t.title_note||''},${t.baseLoad},${t.reduction},${t.overtime},${t.isGradeDirector?1:0},${t.priority||10},${t.id},${(t.constraints||[]).join(';')}`
+                `${t.name},${t.role},${t.classId||''},${t.title_note||''},${t.baseLoad},${t.overtime},${t.reduction},${t.isGradeDirector?1:0},${t.priority||10},${t.id},${(t.constraints||[]).join(';')}`
             ).join('\n');
             const a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([header + rows], { type: 'text/csv;charset=utf-8;' }));
@@ -1394,8 +1394,8 @@ createApp({
                         classId: cols[2]?.trim() || '',
                         title_note: cols[3]?.trim() || '',
                         baseLoad: parseInt(cols[4]) || 0,
-                        reduction: parseInt(cols[5]) || 0,
-                        overtime: parseInt(cols[6]) || 0,
+                        overtime: parseInt(cols[5]) || 0,
+                        reduction: parseInt(cols[6]) || 0,
                         isGradeDirector: cols[7]?.trim() === '1',
                         priority: parseInt(cols[8]) || 10,
                         constraints: cols[10]?.trim() ? cols[10].trim().split(';').filter(Boolean) : [],
