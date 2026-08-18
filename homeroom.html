@@ -165,7 +165,7 @@
         .sc-國語  { background: #fef9c3; } .sc-數學 { background: #dbeafe; }
         .sc-英語  { background: #dbeafe; } .sc-社會 { background: #fef3c7; }
         .sc-自然  { background: #dcfce7; } .sc-生活 { background: #ccfbf1; }
-        .sc-體育  { background: #fee2e2; } .sc-藝文 { background: #f3e8ff; }
+        .sc-體育  { background: #fee2e2; } .sc-藝音 { background: #f3e8ff; } .sc-藝視 { background: #f3e8ff; } .sc-藝表 { background: #f3e8ff; }
         .sc-健康  { background: #ffe4e6; } .sc-本土 { background: #ffedd5; }
         .sc-綜合  { background: #f0fdf4; } .sc-other{ background: #f8fafc;  }
 
@@ -439,7 +439,7 @@ function countPlaced(cid, subj) {
 }
 
 function cellBgClass(subject) {
-    const known = ['國語','數學','英語','社會','自然','生活','體育','藝文','健康','本土','綜合'];
+    const known = ['國語','數學','英語','社會','自然','生活','體育','藝音','藝視','藝表','健康','本土','綜合'];
     return known.includes(subject) ? `sc-${subject}` : 'sc-other';
 }
 
