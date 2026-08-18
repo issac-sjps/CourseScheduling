@@ -357,16 +357,16 @@
             </div>
 
             <!-- 教師視角 -->
-            <div v-if="assignMode === 'teacher'" class="bg-white p-6 rounded shadow border-t-4 border-indigo-500">
-                <div class="mb-4">
-                    <h4 class="font-bold mb-2">1. 選擇老師</h4>
-                    <div class="space-y-2">
+            <div v-if="assignMode === 'teacher'" class="bg-white p-3 rounded shadow border-t-4 border-indigo-500 text-sm">
+                <div class="mb-2">
+                    <h4 class="font-bold mb-1">1. 選擇老師</h4>
+                    <div class="space-y-1">
                         <div v-for="role in ['主任','組長','科任']" :key="role" class="flex gap-2">
                             <div class="w-10 text-xs font-bold pt-2">{{ role }}</div>
-                            <div class="flex flex-wrap gap-1">
+                            <div class="flex flex-wrap gap-0.5">
                                 <button v-for="t in getTeachersByRoleGroup(role)" :key="t.id"
                                     @click="batchTeacherId = t.id" class="select-btn"
-                                    :class="{'active': batchTeacherId === t.id}">
+                                    :class="{'active': batchTeacherId === t.id}" style="padding:2px 5px;font-size:11px">
                                     {{ t.name }}
                                     <span class="text-[10px] ml-1 opacity-70">({{ getTeacherLoad(t.id) }}/{{ calculateTargetLoad(t) }})</span>
                                 </button>
@@ -374,15 +374,15 @@
                         </div>
                     </div>
                 </div>
-                <div class="mb-6 border-t pt-4">
-                    <h4 class="font-bold mb-2">2. 選擇科目</h4>
-                    <div class="flex flex-wrap gap-1">
+                <div class="mb-2 border-t pt-2">
+                    <h4 class="font-bold mb-1">2. 選擇科目</h4>
+                    <div class="flex flex-wrap gap-0.5">
                         <button v-for="s in subjects" :key="s.zh" @click="batchSubject = s.zh"
-                            class="select-btn" :class="[batchSubject === s.zh ? 'active' : '', getSubjectColor(s.zh)]">{{ s.zh }}</button>
+                            class="select-btn" style="padding:2px 5px;font-size:11px" :class="[batchSubject === s.zh ? 'active' : '', getSubjectColor(s.zh)]">{{ s.zh }}</button>
                     </div>
                 </div>
-                <div v-if="batchTeacherId && batchSubject" class="border-t pt-4">
-                    <h4 class="font-bold text-blue-800 text-lg mb-2">3. 分配 {{ getTeacherName(batchTeacherId) }} 的「{{ batchSubject }}」</h4>
+                <div v-if="batchTeacherId && batchSubject" class="border-t pt-2">
+                    <h4 class="font-bold text-blue-800 mb-1">3. 分配 {{ getTeacherName(batchTeacherId) }} 的「{{ batchSubject }}」</h4>
                     <div class="bg-blue-50 p-4 rounded mb-4" v-if="getAssignedClassesForTeacher(batchTeacherId, batchSubject).length > 0">
                         <div class="font-bold text-sm text-blue-900 mb-2">已分配 (微調):</div>
                         <div class="flex flex-wrap gap-3">
@@ -398,12 +398,12 @@
                             </div>
                         </div>
                     </div>
-                    <div v-for="g in 6" :key="g" class="flex items-center gap-4 py-2 border-b border-dashed">
-                        <div class="w-12 font-bold text-sm">{{ g }}年</div>
-                        <div class="flex-1 flex flex-wrap gap-2">
+                    <div v-for="g in 6" :key="g" class="flex items-center gap-2 py-1 border-b border-dashed">
+                        <div class="w-8 font-bold text-xs">{{ g }}年</div>
+                        <div class="flex-1 flex flex-wrap gap-1">
                             <div v-for="cls in getClassListByGrade(g)" :key="cls.id"
                                 @click="isTakenByOther(cls.id, batchSubject, batchTeacherId) ? null : toggleTeacherClass(cls.id, g)"
-                                class="class-btn w-16"
+                                class="class-btn w-12" style="min-width:48px;padding:2px 3px"
                                 :class="{'active': getAssignment(cls.id, batchSubject).primary == batchTeacherId, 'disabled': getPeriodCount(g, batchSubject) === 0 || isTakenByOther(cls.id, batchSubject, batchTeacherId)}"
                                 :title="isTakenByOther(cls.id, batchSubject, batchTeacherId) ? ('已由 ' + getTeacherName(getAssignment(cls.id, batchSubject).primary) + ' 任教，不可重複配課') : ''">
                                 <div class="font-bold text-xs">{{ cls.name }}</div>
