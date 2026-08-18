@@ -155,10 +155,15 @@
     <!-- ── TOP NAV ── -->
     <div class="bg-gray-800 text-white p-3 sticky top-0 z-50 shadow no-print">
         <div class="flex flex-wrap justify-between items-center max-w-[1800px] mx-auto gap-2">
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-4 flex-wrap">
                 <h1 class="text-xl font-bold text-yellow-400">🏫 排課系統</h1>
+                <div class="flex bg-gray-900 rounded p-1 gap-1">
+                    <button v-for="space in workspaces" :key="space.id" @click="selectWorkspace(space.id)"
+                        :class="currentWorkspace === space.id ? 'bg-yellow-500 text-black font-bold' : 'text-gray-300 hover:bg-gray-600'"
+                        class="px-3 py-1 rounded text-sm transition">{{ space.name }}</button>
+                </div>
                 <nav class="flex bg-gray-700 rounded p-1 gap-1 flex-wrap">
-                    <button v-for="tab in tabs" :key="tab.id"
+                    <button v-for="tab in workspaceTabs" :key="tab.id"
                         @click="currentTab = tab.id"
                         :class="currentTab === tab.id ? 'bg-yellow-500 text-black font-bold' : 'text-gray-300 hover:bg-gray-600'"
                         class="px-3 py-1 rounded text-sm transition">{{ tab.name }}</button>
@@ -182,7 +187,7 @@
         <!-- ══════════════════════════════════
              01. 基礎設定
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'settings'" class="space-y-4 no-print">
+        <div v-if="currentTab === 'settings'" class="space-y-4 no-print">
             <div class="bg-white p-4 rounded shadow border-l-4 border-purple-500 overflow-x-auto">
                 <h3 class="font-bold text-lg mb-2 text-purple-900">📊 01. 節數設定矩陣</h3>
                 <div class="max-h-[60vh] overflow-auto">
@@ -228,7 +233,7 @@
         <!-- ══════════════════════════════════
              02. 教師管理
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'teachers'" class="bg-white p-4 rounded shadow no-print">
+        <div v-if="currentTab === 'teachers'" class="bg-white p-4 rounded shadow no-print">
             <div class="flex justify-between items-center mb-2">
                 <h3 class="font-bold text-lg">👩‍🏫 02. 教師資料</h3>
                 <div class="flex gap-2 items-center">
@@ -306,7 +311,7 @@
         <!-- ══════════════════════════════════
              03. 配課設定
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'assignments'" class="space-y-4 no-print">
+        <div v-if="currentTab === 'assignments'" class="space-y-4 no-print">
             <div class="flex justify-center gap-4 mb-2">
                 <button @click="assignMode='class'"   class="btn" :class="assignMode=='class'  ?'btn-blue':'btn-gray'">🏫 班級視角</button>
                 <button @click="assignMode='teacher'" class="btn" :class="assignMode=='teacher'?'btn-blue':'btn-gray'">👨‍🏫 教師視角</button>
@@ -466,7 +471,7 @@
         <!-- ══════════════════════════════════
              04. 特殊排課規則
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'special'" class="max-w-[1000px] mx-auto no-print">
+        <div v-if="currentTab === 'special'" class="max-w-[1000px] mx-auto no-print">
             <div class="bg-white p-6 rounded shadow border-l-4 border-orange-500">
                 <h3 class="font-bold text-xl text-orange-600 border-b pb-2 mb-4">🛡️ 04. 特殊排課規則</h3>
                 <div class="flex gap-4 mb-4">
@@ -494,7 +499,7 @@
         <!-- ══════════════════════════════════
              05. 科任權重
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'priority'" class="max-w-[1000px] mx-auto no-print">
+        <div v-if="currentTab === 'priority'" class="max-w-[1000px] mx-auto no-print">
             <div class="bg-white p-6 rounded shadow border-l-4 border-indigo-500">
                 <h3 class="font-bold text-xl text-indigo-600 border-b pb-2 mb-4">⚡ 05. 科任權重</h3>
                 <div class="grid grid-cols-3 gap-4">
@@ -509,7 +514,7 @@
         <!-- ══════════════════════════════════
              06. 班級預排課
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'class_schedule'" class="no-print">
+        <div v-if="currentTab === 'class_schedule'" class="no-print">
             <div class="bg-white p-3 rounded shadow flex flex-col gap-3 mb-4">
                 <div class="flex gap-2 items-center">
                     <span class="font-bold">班級排課：</span>
@@ -543,7 +548,7 @@
         <!-- ══════════════════════════════════
              07. 科任預排課
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'specialist_pre'" class="no-print">
+        <div v-if="currentTab === 'specialist_pre'" class="no-print">
             <!-- 說明 -->
             <div class="bg-amber-50 border border-amber-200 rounded p-3 mb-4 text-sm text-amber-800 flex gap-2 items-start">
                 <span class="text-lg">💡</span>
@@ -597,7 +602,7 @@
         <!-- ══════════════════════════════════
              08. 科任排課
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'teacher_schedule'" class="no-print">
+        <div v-if="currentTab === 'teacher_schedule'" class="no-print">
             <div class="bg-white p-3 rounded shadow flex flex-col gap-3 mb-4">
                 <div class="flex gap-2 border-b pb-2 items-center flex-wrap">
                     <span class="font-bold">科任排課：</span>
@@ -651,7 +656,7 @@
         <!-- ══════════════════════════════════
              08. 規則檢查
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'rules'" class="max-w-[1000px] mx-auto no-print">
+        <div v-if="currentTab === 'rules'" class="max-w-[1000px] mx-auto no-print">
             <div class="bg-white p-6 rounded shadow border-l-4 border-teal-500">
                 <div class="flex justify-between items-center mb-4 border-b pb-2">
                     <h3 class="font-bold text-xl text-teal-600">🚦 08. 排課規則檢查儀表板</h3>
@@ -683,7 +688,7 @@
         <!-- ══════════════════════════════════
              09. 統計
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'stats'" class="max-w-[1200px] mx-auto no-print">
+        <div v-if="currentTab === 'stats'" class="max-w-[1200px] mx-auto no-print">
             <div class="bg-white p-6 rounded shadow">
                 <h3 class="font-bold text-xl mb-4 border-b pb-2">📊 09. 全校教師節數統計</h3>
                 <div class="flex gap-2 mb-4">
@@ -703,7 +708,7 @@
         <!-- ══════════════════════════════════
              10. 查詢列印
         ═══════════════════════════════════════ -->
-        <div v-show="currentTab === 'query'" class="max-w-[1000px] mx-auto">
+        <div v-if="currentTab === 'query'" class="max-w-[1000px] mx-auto">
             <div class="bg-white p-4 rounded shadow mb-6 no-print flex gap-4 items-end border-b-4 border-black flex-wrap">
                 <div>
                     <label class="block font-bold text-sm mb-1">對象</label>
@@ -869,7 +874,9 @@ const { createApp, ref, computed, onMounted, watch } = Vue;
 createApp({
     setup() {
         // ── 1. STATE ──────────────────────────────────────────────
-        const currentTab  = ref('settings');
+        const requestedWorkspace = new URLSearchParams(window.location.search).get('workspace');
+        const currentWorkspace = ref(['setup', 'scheduling', 'reporting'].includes(requestedWorkspace) ? requestedWorkspace : 'setup');
+        const currentTab  = ref(currentWorkspace.value === 'scheduling' ? 'special' : currentWorkspace.value === 'reporting' ? 'stats' : 'settings');
         const assignMode  = ref('class');
         const syncStatus  = ref('syncing'); // syncing | ok | error
         const syncLabel   = computed(() => ({
@@ -886,19 +893,29 @@ createApp({
         // 教師名單拖曳排序用的暫存狀態
         const dragTeacherIdx = ref(null);
         const dragOverTeacherIdx = ref(null);
-        const tabs = [
-            { id:'settings',          name:'01.基礎設定'    },
-            { id:'teachers',          name:'02.教師管理'    },
-            { id:'assignments',       name:'03.配課設定'    },
-            { id:'special',           name:'04.🛡️ 特殊排課' },
-            { id:'priority',          name:'05.⚡ 科任權重'  },
-            { id:'class_schedule',      name:'06.班級預排課'    },
-            { id:'specialist_pre',      name:'07.科任預排課'    },
-            { id:'teacher_schedule',    name:'08.科任排課'      },
-            { id:'rules',               name:'09.🚦 規則檢查'   },
-            { id:'stats',               name:'10.📊 統計資料'   },
-            { id:'query',               name:'11.查詢列印'      },
+        const workspaces = [
+            { id: 'setup', name: '排課前設定' },
+            { id: 'scheduling', name: '電腦排課' },
+            { id: 'reporting', name: '統計與列印' },
         ];
+        const tabs = [
+            { id:'settings',         name:'01.基礎設定', workspace:'setup' },
+            { id:'teachers',         name:'02.教師管理', workspace:'setup' },
+            { id:'assignments',      name:'03.配課設定', workspace:'setup' },
+            { id:'special',          name:'04.🛡️ 特殊排課', workspace:'scheduling' },
+            { id:'priority',         name:'05.⚡ 科任權重', workspace:'scheduling' },
+            { id:'class_schedule',   name:'06.班級預排課', workspace:'scheduling' },
+            { id:'specialist_pre',   name:'07.科任預排課', workspace:'scheduling' },
+            { id:'teacher_schedule', name:'08.科任排課', workspace:'scheduling' },
+            { id:'rules',            name:'09.🚦 規則檢查', workspace:'scheduling' },
+            { id:'stats',            name:'10.📊 統計資料', workspace:'reporting' },
+            { id:'query',            name:'11.查詢列印', workspace:'reporting' },
+        ];
+        const workspaceTabs = computed(() => tabs.filter(tab => tab.workspace === currentWorkspace.value));
+        function selectWorkspace(workspace) {
+            currentWorkspace.value = workspace;
+            currentTab.value = tabs.find(tab => tab.workspace === workspace)?.id || 'settings';
+        }
 
         const days    = DAYS;
         const periods = PERIODS;
@@ -1619,14 +1636,10 @@ createApp({
         }
 
         async function loadFromCloud(silent = false) {
-            // 靜默背景輪詢時，如果本機還有未存檔的變更，先跳過這次同步，
-            // 避免把使用者正在編輯、還沒寫回雲端的內容用舊資料覆蓋掉。
             if (silent && hasUnsavedChanges.value) return;
             if (!silent) syncStatus.value = 'syncing';
             try {
-                const snap = await db.doc(FS_DOC_PATH).get();
-                if (snap.exists) applyCloudData(snap.data());
-                else teachers.value = getDefaultTeachers(gradeConfig.value);
+                await loadNormalizedData();
                 syncStatus.value = 'ok';
             } catch(e) {
                 syncStatus.value = 'error';
@@ -1759,7 +1772,7 @@ createApp({
 
         // ── RETURN ────────────────────────────────────────────────
         return {
-            currentTab, tabs, assignMode, days, periods, subjects,
+            currentTab, currentWorkspace, workspaces, tabs, workspaceTabs, selectWorkspace, assignMode, days, periods, subjects,
             teachers, gradeConfig, scheduleData, specialRules, newRule,
             selectedClass, selectedTeacherId, queryMode, queryTarget,
             showModal, modalData, statsFilter, batchSubject, batchTeacherId,
