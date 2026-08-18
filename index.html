@@ -330,13 +330,17 @@
                             <tbody>
                                 <tr v-for="cls in getClassListByGrade(g)" :key="cls.id" class="border-b hover:bg-gray-50">
                                     <td class="font-bold py-1 p-1">{{ cls.name }}</td>
-                                    <td v-for="s in getSubjectsForGrade(g)" class="p-1 border-l text-center">
+                                    <td v-for="s in getSubjectsForGrade(g)" class="p-1 border-l text-center"
+                                        :class="{ 'bg-gray-200': isExplicitAssignment(cls.id, s.zh) }">
                                         <select :value="getAssignment(cls.id, s.zh).primary"
                                             @change="setAssignment(cls.id, s.zh, 'primary', $event.target.value)"
+                                            :disabled="isExplicitAssignment(cls.id, s.zh)"
                                             class="compact-select" :class="getRoleColor(getTeacherRole(getAssignment(cls.id, s.zh).primary))">
                                             <option :value="getHomeroomTeacherId(cls.id)">導師</option>
                                             <option v-for="t in specialistTeachers" :value="t.id">{{ t.name }}</option>
                                         </select>
+                                        <button v-if="isExplicitAssignment(cls.id, s.zh)" @click="unlockAssignment(cls.id, s.zh)"
+                                            class="text-[10px] text-gray-400 hover:text-red-500 block mx-auto mt-0.5" title="解鎖，改回自動預設">🔓 解鎖</button>
                                     </td>
                                 </tr>
                             </tbody>
@@ -965,17 +969,35 @@ createApp({
         function sumGradePeriods(g)   { return Object.values(getGradeSubjectConfig(g)).reduce((a,b) => a + (b||0), 0); }
 
         // ── 4. ASSIGNMENT HELPERS ────────────────────────────────
+        // getAssignment 不再自動把「導師」寫進資料庫。如果這個班級/科目還沒有人手動指定過，
+        // 就回傳一個「暫時算出來的預設值」（導師），但不會存進 assignments，畫面重新整理後就消失，
+        // 保持「沒被選過 = 真的空白」。只有透過 setAssignment 手動選過，才會真的寫入、才算「已配課」。
         function getAssignment(cid, subj) {
-            if (!assignments.value[cid]) assignments.value[cid] = {};
-            if (!assignments.value[cid][subj]) {
-                assignments.value[cid][subj] = { primary: getHomeroomTeacherId(cid), secondary: null, override: null };
-            }
-            return assignments.value[cid][subj];
+            const entry = assignments.value[cid]?.[subj];
+            if (entry) return entry;
+            return { primary: getHomeroomTeacherId(cid), secondary: null, override: null, explicit: false };
         }
         function setAssignment(cid, subj, type, val) {
-            getAssignment(cid, subj);
+            if (!assignments.value[cid]) assignments.value[cid] = {};
+            if (!assignments.value[cid][subj]) {
+                assignments.value[cid][subj] = { primary: getHomeroomTeacherId(cid), secondary: null, override: null, explicit: false };
+            }
             assignments.value[cid][subj][type] = val ? parseInt(val) : null;
+            assignments.value[cid][subj].explicit = true; // 使用者親自選過，之後在班級視角會反灰鎖住
             saveData();
+        }
+        // 這一格是否為「使用者手動選過」的配課（而不是導師的自動預設）
+        function isExplicitAssignment(cid, subj) {
+            return !!assignments.value[cid]?.[subj]?.explicit;
+        }
+        // 解鎖：把這一格資料完全刪除，恢復成「未手動配課」狀態（自動歸導師，但不佔資料庫）
+        function unlockAssignment(cid, subj) {
+            if (assignments.value[cid]) delete assignments.value[cid][subj];
+            saveData();
+        }
+        // 列出「某年級、該年級課表要教的所有科目」，用來讓負載計算函式知道要檢查哪些班級/科目組合
+        function getGradeActiveSubjects(g) {
+            return subjects.value.filter(s => getPeriodCount(g, s.zh) > 0);
         }
         function getEffectivePeriod(cid, subj) {
             const assign = getAssignment(cid, subj);
@@ -986,7 +1008,13 @@ createApp({
             const assign = getAssignment(cid, subj);
             const grade  = parseInt(cid.charAt(0));
             let cur = assign.override !== null ? assign.override : getPeriodCount(grade, subj);
+            // 微調節數本身就是一種「手動決定」，所以要確保這筆紀錄真的被寫進資料庫（否則沒東西可以改）
+            if (!assignments.value[cid]) assignments.value[cid] = {};
+            if (!assignments.value[cid][subj]) {
+                assignments.value[cid][subj] = { primary: assign.primary, secondary: assign.secondary, override: null, explicit: true };
+            }
             assignments.value[cid][subj].override = Math.max(0, cur + delta);
+            assignments.value[cid][subj].explicit = true;
             saveData();
         }
         function toggleTeacherClass(cid, grade, subj, tid) {
@@ -1026,24 +1054,25 @@ createApp({
         // Returns pending tasks for a teacher (accounting for already-placed slots)
         function getAllAssignmentsForTeacher(tid) {
             let list = [];
-            for (const cid in assignments.value) {
-                for (const subj in assignments.value[cid]) {
-                    const assign = assignments.value[cid][subj];
-                    if (assign.primary != tid) continue;
-                    const grade  = parseInt(cid.charAt(0));
-                    const target = assign.override !== null ? assign.override : getPeriodCount(grade, subj);
-                    let placed = 0;
-                    const clsData = scheduleData.value[cid];
-                    if (clsData) {
-                        for (const d in clsData) {
-                            for (const p in clsData[d]) {
-                                const cell = clsData[d][p];
-                                if (cell && cell.subject === subj && cell.teacherId == tid) placed++;
+            for (const g of [1,2,3,4,5,6]) {
+                for (const cls of getClassListByGrade(g)) {
+                    for (const s of getGradeActiveSubjects(g)) {
+                        const assign = getAssignment(cls.id, s.zh); // 未手動指定就自動當導師，不看資料庫是否真的有存
+                        if (assign.primary != tid) continue;
+                        const target = assign.override !== null ? assign.override : getPeriodCount(g, s.zh);
+                        let placed = 0;
+                        const clsData = scheduleData.value[cls.id];
+                        if (clsData) {
+                            for (const d in clsData) {
+                                for (const p in clsData[d]) {
+                                    const cell = clsData[d][p];
+                                    if (cell && cell.subject === s.zh && cell.teacherId == tid) placed++;
+                                }
                             }
                         }
-                    }
-                    if (target > placed) {
-                        list.push({ cid, name: getClassName(cid), subj, remaining: target - placed, total: target });
+                        if (target > placed) {
+                            list.push({ cid: cls.id, name: getClassName(cls.id), subj: s.zh, remaining: target - placed, total: target });
+                        }
                     }
                 }
             }
@@ -1062,15 +1091,16 @@ createApp({
             }
             return count;
         }
-        // 該老師依配課設定應排幾節
+        // 該老師依配課設定應排幾節（含「沒被特別指定、自動歸導師」的科目，不再只看資料庫裡有沒有存紀錄）
         function getTotalAssigned(tid) {
             let count = 0;
-            for (const cid in assignments.value) {
-                const grade = parseInt(cid.charAt(0));
-                for (const subj in assignments.value[cid]) {
-                    const assign = assignments.value[cid][subj];
-                    if (assign.primary == tid) {
-                        count += (assign.override !== null ? assign.override : getPeriodCount(grade, subj));
+            for (const g of [1,2,3,4,5,6]) {
+                for (const cls of getClassListByGrade(g)) {
+                    for (const s of getGradeActiveSubjects(g)) {
+                        const assign = getAssignment(cls.id, s.zh);
+                        if (assign.primary == tid) {
+                            count += (assign.override !== null ? assign.override : getPeriodCount(g, s.zh));
+                        }
                     }
                 }
             }
@@ -1078,17 +1108,7 @@ createApp({
         }
 
         function getTeacherLoad(tid) {
-            let count = 0;
-            for (const cid in assignments.value) {
-                const grade = parseInt(cid.charAt(0));
-                for (const subj in assignments.value[cid]) {
-                    const assign = assignments.value[cid][subj];
-                    if (assign.primary == tid) {
-                        count += (assign.override !== null ? assign.override : getPeriodCount(grade, subj));
-                    }
-                }
-            }
-            return count;
+            return getTotalAssigned(tid);
         }
         function calculateTargetLoad(t) { return (t.baseLoad||0) - (t.reduction||0) + (t.overtime||0); }
 
@@ -1704,6 +1724,7 @@ createApp({
             getRoleColor, getSubjectColor, getPeriodTimeLabel, getPrintCellStyle,
             getClassName, getSubjectsForGrade, getClassListByGrade, getTeachersByRoleGroup,
             getAssignment, setAssignment, getEffectivePeriod, adjustPeriodOverride,
+            isExplicitAssignment, unlockAssignment,
             toggleTeacherClass, getAssignedClassesForTeacher,
             getTeacherTarget, getRealAssignedCount,
             getTeacherLoad, calculateTargetLoad, getPlacedCount, getTotalAssigned,
