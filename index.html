@@ -202,7 +202,7 @@
                             <tr v-for="g in 6" :key="g">
                                 <td class="font-bold bg-gray-50 sticky left-0 z-10">{{ g }} 年級</td>
                                 <td v-for="sub in subjects" :key="sub.zh">
-                                    <input type="number" v-model.number="getGradeSubjectConfig(g)[sub.zh]"
+                                    <input type="number" v-model.number="getGradeSubjectConfig(g)[sub.zh]" @change="saveData"
                                         class="matrix-input" :class="{'has-value': getGradeSubjectConfig(g)[sub.zh] > 0}" min="0">
                                 </td>
                                 <td class="font-bold text-center bg-gray-100 border-l-2 border-gray-400 sticky right-0 z-10 text-blue-800">{{ sumGradePeriods(g) }}</td>
@@ -216,7 +216,7 @@
                 <div class="flex gap-4 mt-2 flex-wrap">
                     <div v-for="g in 6" :key="g" class="flex items-center gap-1 bg-gray-50 p-1 rounded border">
                         <span>{{ g }}年:</span>
-                        <input type="number" v-model="gradeConfig[g]" class="w-10 text-center border rounded">班
+                        <input type="number" v-model="gradeConfig[g]" @change="saveData" class="w-10 text-center border rounded">班
                     </div>
                     <button @click="regenerateTeachers" class="btn btn-red text-xs ml-auto">重置導師名單</button>
                 </div>
@@ -256,20 +256,20 @@
                     </thead>
                     <tbody>
                         <tr v-for="(t, idx) in teachers" :key="t.id" class="border-b hover:bg-gray-50">
-                            <td class="p-1"><input v-model="t.name" class="w-full border rounded p-1 font-bold" :class="getRoleColor(t.role)"></td>
-                            <td class="p-1"><select v-model="t.role" class="w-full border rounded p-1" :class="getRoleColor(t.role)"><option>導師</option><option>科任</option><option>組長</option><option>主任</option></select></td>
+                            <td class="p-1"><input v-model="t.name" @change="saveData" class="w-full border rounded p-1 font-bold" :class="getRoleColor(t.role)"></td>
+                            <td class="p-1"><select v-model="t.role" @change="saveData" class="w-full border rounded p-1" :class="getRoleColor(t.role)"><option>導師</option><option>科任</option><option>組長</option><option>主任</option></select></td>
                             <td class="p-1 bg-yellow-50">
-                                <select v-if="t.role === '導師'" v-model="t.classId" class="w-full border rounded p-1 font-bold text-blue-800 text-xs">
+                                <select v-if="t.role === '導師'" v-model="t.classId" @change="saveData" class="w-full border rounded p-1 font-bold text-blue-800 text-xs">
                                     <option value="">未定</option>
                                     <option v-for="c in classList" :value="c.id">{{ c.name }}</option>
                                 </select>
                                 <span v-else class="text-gray-400 text-xs text-center block">-</span>
                             </td>
-                            <td class="p-1 text-center"><input type="checkbox" v-model="t.isGradeDirector" class="w-4 h-4"></td>
-                            <td class="p-1"><input v-model="t.title_note" class="w-full border rounded p-1 text-xs"></td>
-                            <td class="p-1 bg-blue-50"><input type="number" v-model.number="t.baseLoad" class="w-full text-center border rounded p-1"></td>
-                            <td class="p-1 bg-red-100"><input type="number" v-model.number="t.reduction" max="0" class="w-full text-center border rounded p-1 text-red-600 font-bold"></td>
-                            <td class="p-1 bg-green-100"><input type="number" v-model.number="t.overtime" min="0" class="w-full text-center border rounded p-1 text-green-600 font-bold"></td>
+                            <td class="p-1 text-center"><input type="checkbox" v-model="t.isGradeDirector" @change="saveData" class="w-4 h-4"></td>
+                            <td class="p-1"><input v-model="t.title_note" @change="saveData" class="w-full border rounded p-1 text-xs"></td>
+                            <td class="p-1 bg-blue-50"><input type="number" v-model.number="t.baseLoad" @change="saveData" class="w-full text-center border rounded p-1"></td>
+                            <td class="p-1 bg-red-100"><input type="number" v-model.number="t.reduction" @change="saveData" max="0" class="w-full text-center border rounded p-1 text-red-600 font-bold"></td>
+                            <td class="p-1 bg-green-100"><input type="number" v-model.number="t.overtime" @change="saveData" min="0" class="w-full text-center border rounded p-1 text-green-600 font-bold"></td>
                             <td class="p-1 text-center font-bold text-lg">{{ calculateTargetLoad(t) }}</td>
                             <td class="p-2 text-xs text-center font-bold" :class="{'bg-green-500 text-white': getTeacherLoad(t.id) === calculateTargetLoad(t), 'bg-red-100 text-red-600': getTeacherLoad(t.id) > calculateTargetLoad(t)}">
                                 <span v-if="getTeacherLoad(t.id) === calculateTargetLoad(t)">✔ {{ getTeacherLoad(t.id) }}/{{ calculateTargetLoad(t) }}</span>
@@ -475,7 +475,7 @@
                 <div class="grid grid-cols-3 gap-4">
                     <div v-for="t in specialistTeachers" :key="t.id" class="flex items-center gap-2 bg-gray-50 p-2 rounded border">
                         <span class="font-bold w-24">{{ t.name }}</span>
-                        <input type="number" v-model.number="t.priority" class="w-16 border rounded text-center">
+                        <input type="number" v-model.number="t.priority" @change="saveData" class="w-16 border rounded text-center">
                     </div>
                 </div>
             </div>
