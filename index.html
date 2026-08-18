@@ -83,6 +83,25 @@
         .dot-red   { background: #ef4444; box-shadow: 0 0 5px #ef4444; animation: pulse 1s infinite; }
         .rule-card { transition: all 0.3s; }
 
+        /* ── 浮動儲存按鈕 ── */
+        .save-fab {
+            position: fixed; right: 20px; bottom: 20px; z-index: 100;
+            display: flex; align-items: center; gap: 6px;
+            padding: 10px 16px; border-radius: 999px; border: none;
+            background: #16a34a; color: white; font-weight: bold; font-size: 0.85rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25); cursor: pointer;
+            transition: all 0.15s;
+        }
+        .save-fab:hover { filter: brightness(1.1); transform: translateY(-2px); }
+        .save-fab:active { transform: translateY(0); }
+        .save-fab-dirty { background: #f97316; animation: fabPulse 1.4s infinite; }
+        .save-fab-text { white-space: nowrap; }
+        @keyframes fabPulse {
+            0%, 100% { box-shadow: 0 4px 12px rgba(249,115,22,0.4); }
+            50%      { box-shadow: 0 4px 20px rgba(249,115,22,0.8); }
+        }
+        @media print { .save-fab { display: none !important; } }
+
         /* ── PRINT STYLES ── */
         @media print {
             .no-print { display: none !important; }
@@ -121,6 +140,16 @@
 </head>
 <body class="pb-20">
 <div id="app">
+
+    <!-- ── 浮動「立即儲存」按鈕：右下角，隨時可手動存檔，不用等 800ms 自動儲存 ── -->
+    <button @click="saveNow" class="no-print"
+        :class="hasUnsavedChanges ? 'save-fab save-fab-dirty' : 'save-fab'"
+        :title="hasUnsavedChanges ? '有尚未儲存的變更，點擊立即儲存' : '立即儲存到雲端'">
+        <span v-if="syncStatus==='syncing'">⏳</span>
+        <span v-else-if="hasUnsavedChanges">💾</span>
+        <span v-else>✓</span>
+        <span class="save-fab-text">{{ hasUnsavedChanges ? '尚未儲存' : '已儲存' }}</span>
+    </button>
 
     <!-- ── TOP NAV ── -->
     <div class="bg-gray-800 text-white p-3 sticky top-0 z-50 shadow no-print">
@@ -821,6 +850,10 @@ createApp({
         const syncLabel   = computed(() => ({
             syncing: '儲存中...', ok: '✓ 已同步', error: '⚠ 儲存失敗'
         }[syncStatus.value] || '儲存中...'));
+        // hasUnsavedChanges: true 代表本機有變更尚未成功寫回雲端。
+        // 用途：(1) 背景 5 秒輪詢時，若本機還有未存檔的變更就先跳過，避免把使用者正在編輯的內容覆蓋掉。
+        //       (2) 右下角浮動「立即儲存」按鈕會依此顯示提醒動畫，讓使用者可以手動確保存檔。
+        const hasUnsavedChanges = ref(false);
         const tabs = [
             { id:'settings',          name:'01.基礎設定'    },
             { id:'teachers',          name:'02.教師管理'    },
@@ -1337,28 +1370,42 @@ createApp({
         // ── 13. PERSIST ──────────────────────────────────────────
         // FIX: use consistent key STORAGE_KEY from data.js
         // saveData: 每次操作後自動存雲端（fire-and-forget，不 block UI）
+        function buildPayload() {
+            return {
+                teachers: teachers.value,
+                gradeConfig: gradeConfig.value,
+                gradeSubjectConfig: gradeSubjectConfig.value,
+                schedule: scheduleData.value,
+                assignments: assignments.value,
+                specialRules: specialRules.value,
+                teacherTargets: teacherTargets.value,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            };
+        }
+
+        async function writeToCloud() {
+            syncStatus.value = 'syncing';
+            try {
+                await db.doc(FS_DOC_PATH).set(buildPayload());
+                syncStatus.value = 'ok';
+                hasUnsavedChanges.value = false;
+            } catch (e) {
+                syncStatus.value = 'error';
+                console.error('Save failed:', e);
+            }
+        }
+
         function saveData() {
+            hasUnsavedChanges.value = true; // 標記為「有變更尚未存檔」，暫停背景輪詢覆蓋
             if (saveData._timer) clearTimeout(saveData._timer);
-            saveData._timer = setTimeout(async () => {
-                syncStatus.value = 'syncing';
-                try {
-                    const payload = {
-                        teachers: teachers.value,
-                        gradeConfig: gradeConfig.value,
-                        gradeSubjectConfig: gradeSubjectConfig.value,
-                        schedule: scheduleData.value,
-                        assignments: assignments.value,
-                        specialRules: specialRules.value,
-                        teacherTargets: teacherTargets.value,
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    };
-                    await db.doc(FS_DOC_PATH).set(payload);
-                    syncStatus.value = 'ok';
-                } catch(e) {
-                    syncStatus.value = 'error';
-                    console.error('Auto-save failed:', e);
-                }
-            }, 800); // debounce 800ms，避免連續操作打太多請求
+            saveData._timer = setTimeout(writeToCloud, 800); // debounce 800ms，避免連續操作打太多請求
+        }
+
+        // 手動「立即儲存」：跳過 debounce，馬上寫入雲端。給右下角浮動按鈕使用，
+        // 讓使用者在編輯到一個段落時可以主動確保資料已經存進 Firestore。
+        async function saveNow() {
+            if (saveData._timer) clearTimeout(saveData._timer);
+            await writeToCloud();
         }
 
         // ── 雲端同步 ──────────────────────────────────────────────
@@ -1420,6 +1467,9 @@ createApp({
         }
 
         async function loadFromCloud(silent = false) {
+            // 靜默背景輪詢時，如果本機還有未存檔的變更，先跳過這次同步，
+            // 避免把使用者正在編輯、還沒寫回雲端的內容用舊資料覆蓋掉。
+            if (silent && hasUnsavedChanges.value) return;
             if (!silent) syncStatus.value = 'syncing';
             try {
                 const snap = await db.doc(FS_DOC_PATH).get();
@@ -1575,8 +1625,8 @@ createApp({
             runGlobalAutoFill, runRuleValidation,
             addTeacher, regenerateTeachers,
             exportTeacherCSV, importTeacherCSV,
-            saveData, doPrint,
-            syncStatus, syncLabel,
+            saveData, saveNow, doPrint,
+            syncStatus, syncLabel, hasUnsavedChanges,
         };
     }
 }).mount('#app');
