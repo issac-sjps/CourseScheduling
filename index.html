@@ -219,6 +219,7 @@
                         <input type="number" v-model="gradeConfig[g]" @change="saveData" class="w-10 text-center border rounded">班
                     </div>
                     <button @click="regenerateTeachers" class="btn btn-red text-xs ml-auto">重置導師名單</button>
+                    <button @click="resetAllData" class="btn text-xs" style="background:#7f1d1d;color:white;">🗑️ 清空全部資料</button>
                 </div>
             </div>
         </div>
@@ -1317,7 +1318,26 @@ createApp({
             teachers.value.push({ id: Date.now(), name: '新師', role: '科任', classId: '', baseLoad: 20, priority: 10, constraints: [], isGradeDirector: false });
         }
         function regenerateTeachers() {
-            if (confirm('重置導師名單？')) teachers.value = getDefaultTeachers(gradeConfig.value);
+            if (confirm('重置導師名單？')) {
+                teachers.value = getDefaultTeachers(gradeConfig.value);
+                saveData();
+            }
+        }
+
+        // 清空全部資料：把教師、課表、配課、特殊規則、節數設定全部還原成系統預設值，
+        // 並立即寫回雲端（不走 debounce），給「資料還很少，想整個重新開始」時使用。
+        async function resetAllData() {
+            if (!confirm('⚠️ 確定要清空「全部」資料嗎？\n這會刪除目前的教師名單、所有課表、配課設定與特殊規則，還原成系統預設值，且會立刻覆蓋雲端資料，無法復原！')) return;
+            if (!confirm('再次確認：真的要清空全部資料嗎？此動作無法復原。')) return;
+            gradeConfig.value        = JSON.parse(JSON.stringify(DEFAULT_GRADE_CLASS_COUNT));
+            gradeSubjectConfig.value = JSON.parse(JSON.stringify(DEFAULT_GRADE_MATRIX));
+            teachers.value            = getDefaultTeachers(gradeConfig.value);
+            scheduleData.value        = {};
+            assignments.value         = {};
+            specialRules.value        = [];
+            teacherTargets.value      = {};
+            await saveNow();
+            alert('✅ 已清空並還原成預設值。');
         }
         function getTeachersByRoleGroup(role) { return teachers.value.filter(t => t.role === role); }
         function getSubjectsForGrade(g) { return subjects.value; }
@@ -1623,7 +1643,7 @@ createApp({
             saveCell, saveTeacherScheduleCell, deleteCell, clearAllSchedule,
             addSpecialRule, refreshSpecialStatus,
             runGlobalAutoFill, runRuleValidation,
-            addTeacher, regenerateTeachers,
+            addTeacher, regenerateTeachers, resetAllData,
             exportTeacherCSV, importTeacherCSV,
             saveData, saveNow, doPrint,
             syncStatus, syncLabel, hasUnsavedChanges,
