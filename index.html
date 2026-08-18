@@ -332,10 +332,11 @@
                                     <td class="font-bold py-1 p-1">{{ cls.name }}</td>
                                     <td v-for="s in getSubjectsForGrade(g)" class="p-1 border-l text-center"
                                         :class="{ 'bg-gray-200': isExplicitAssignment(cls.id, s.zh) }">
-                                        <select :value="getAssignment(cls.id, s.zh).primary"
+                                        <select :value="isExplicitAssignment(cls.id, s.zh) ? getAssignment(cls.id, s.zh).primary : ''"
                                             @change="setAssignment(cls.id, s.zh, 'primary', $event.target.value)"
                                             :disabled="isExplicitAssignment(cls.id, s.zh)"
-                                            class="compact-select" :class="getRoleColor(getTeacherRole(getAssignment(cls.id, s.zh).primary))">
+                                            class="compact-select" :class="isExplicitAssignment(cls.id, s.zh) ? getRoleColor(getTeacherRole(getAssignment(cls.id, s.zh).primary)) : 'text-gray-300'">
+                                            <option value="" v-if="!isExplicitAssignment(cls.id, s.zh)">-</option>
                                             <option :value="getHomeroomTeacherId(cls.id)">導師</option>
                                             <option v-for="t in specialistTeachers" :value="t.id">{{ t.name }}</option>
                                         </select>
