@@ -246,6 +246,7 @@
                 <table class="w-full text-sm text-left border-collapse">
                     <thead class="bg-gray-100 sticky top-0 z-10">
                         <tr>
+                            <th class="p-2 border w-10 text-center">序號</th>
                             <th class="p-2 border">姓名</th>
                             <th class="p-2 border">身分</th>
                             <th class="p-2 border w-32 bg-yellow-50">負責班級</th>
@@ -260,7 +261,16 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="(t, idx) in teachers" :key="t.id" class="border-b hover:bg-gray-50">
+                        <tr v-for="(t, idx) in teachers" :key="t.id"
+                            class="border-b hover:bg-gray-50"
+                            @dragover.prevent="onTeacherDragOver(idx)"
+                            @drop.prevent="onTeacherDrop(idx)"
+                            :class="{ 'opacity-40': dragTeacherIdx === idx, 'border-t-2 border-t-blue-500': dragOverTeacherIdx === idx && dragTeacherIdx !== idx }">
+                            <td class="p-1 text-center text-gray-400 cursor-move select-none"
+                                draggable="true"
+                                @dragstart="onTeacherDragStart(idx, $event)"
+                                @dragend="onTeacherDragEnd"
+                                title="按住拖曳可調整順序">⠿ {{ idx + 1 }}</td>
                             <td class="p-1"><input v-model="t.name" @change="saveData" class="w-full border rounded p-1 font-bold" :class="getRoleColor(t.role)"></td>
                             <td class="p-1"><select v-model="t.role" @change="saveData" class="w-full border rounded p-1" :class="getRoleColor(t.role)"><option>導師</option><option>科任</option><option>組長</option><option>主任</option></select></td>
                             <td class="p-1 bg-yellow-50">
@@ -861,6 +871,9 @@ createApp({
         const hasUnsavedChanges = ref(false);
         // 匯入 CSV 時是否「視為全新名單」：勾選後不比對舊 ID，全部當新老師，並清空配課/課表，避免誤接到錯的人。
         const csvImportAsFresh = ref(false);
+        // 教師名單拖曳排序用的暫存狀態
+        const dragTeacherIdx = ref(null);
+        const dragOverTeacherIdx = ref(null);
         const tabs = [
             { id:'settings',          name:'01.基礎設定'    },
             { id:'teachers',          name:'02.教師管理'    },
@@ -1324,6 +1337,27 @@ createApp({
             teachers.value.push({ id: Date.now(), name: '新師', role: '科任', classId: '', baseLoad: 20, priority: 10, constraints: [], isGradeDirector: false });
             saveData();
         }
+
+        // ── 教師名單拖曳排序 ──────────────────────────────────
+        function onTeacherDragStart(idx, e) {
+            dragTeacherIdx.value = idx;
+            e.dataTransfer.effectAllowed = 'move';
+        }
+        function onTeacherDragOver(idx) {
+            dragOverTeacherIdx.value = idx;
+        }
+        function onTeacherDrop(idx) {
+            const from = dragTeacherIdx.value;
+            if (from === null || from === idx) return;
+            const list = teachers.value;
+            const [moved] = list.splice(from, 1);
+            list.splice(idx, 0, moved);
+            saveData();
+        }
+        function onTeacherDragEnd() {
+            dragTeacherIdx.value = null;
+            dragOverTeacherIdx.value = null;
+        }
         function regenerateTeachers() {
             if (confirm('重置導師名單？')) {
                 teachers.value = getDefaultTeachers(gradeConfig.value);
@@ -1679,6 +1713,7 @@ createApp({
             addSpecialRule, refreshSpecialStatus,
             runGlobalAutoFill, runRuleValidation,
             addTeacher, regenerateTeachers, resetAllData,
+            dragTeacherIdx, dragOverTeacherIdx, onTeacherDragStart, onTeacherDragOver, onTeacherDrop, onTeacherDragEnd,
             exportTeacherCSV, importTeacherCSV,
             saveData, saveNow, doPrint,
             syncStatus, syncLabel, hasUnsavedChanges, csvImportAsFresh,
