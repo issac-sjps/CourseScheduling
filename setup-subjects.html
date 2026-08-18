@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>01．節數設定</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="data.js"></script>
+  <style>
+    body{margin:0;background:#f1f5f9;font-family:"Noto Sans TC",system-ui,sans-serif;color:#172033}.bar{background:#172033;color:white;padding:14px 24px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.bar a{color:#dbeafe;text-decoration:none;padding:7px 10px;border-radius:6px}.bar a.active,.bar a:hover{background:#fbbf24;color:#172033}.wrap{max-width:980px;margin:28px auto;padding:0 16px}.card{background:white;border-radius:10px;padding:22px;box-shadow:0 1px 4px #0002}.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px;margin-top:18px}.cell{border:1px solid #cbd5e1;border-radius:7px;padding:10px}.cell label{display:block;font-weight:700;margin-bottom:7px}.cell input{width:100%;box-sizing:border-box;padding:7px;border:1px solid #94a3b8;border-radius:5px;font-size:16px}.save{background:#2563eb;color:white;border:0;border-radius:6px;padding:9px 16px;font-weight:700;cursor:pointer}.status{margin-left:auto;color:#475569;font-size:14px}
+  </style>
+</head>
+<body>
+<nav class="bar"><strong>🏫 排課前設定</strong><a class="active" href="setup-subjects.html">01 節數設定</a><a href="setup-teachers.html">02 教師管理</a><a href="setup-assignments.html">03 配課設定</a><a href="scheduler.html">電腦排課</a><a href="reports.html">統計與列印</a></nav>
+<main class="wrap"><section class="card"><h1>01．節數設定</h1><p>一次只編輯一個年級，未按儲存不會寫入雲端。</p><div class="row"><label>年級 <select id="grade"></select></label><button class="save" id="save">儲存本年級設定</button><span class="status" id="status">載入中…</span></div><div class="grid" id="grid"></div></section></main>
+<script>
+firebase.initializeApp(FIREBASE_CONFIG); const db=firebase.firestore();
+const ref=db.collection(FS_COLLECTIONS.config).doc(FS_CONFIG_DOC); let config={}; let grade=1;
+const $=id=>document.getElementById(id); const clone=o=>JSON.parse(JSON.stringify(o));
+async function load(){const snap=await ref.get();config=snap.exists?snap.data():{};config.gradeConfig=config.gradeConfig||clone(DEFAULT_GRADE_CLASS_COUNT);config.gradeSubjectConfig=config.gradeSubjectConfig||clone(DEFAULT_GRADE_MATRIX);for(let g=1;g<=6;g++)$('grade').add(new Option(`${g} 年級`,g));$('grade').value=grade;$('grade').onchange=()=>{grade=+$('grade').value;render()};render();$('status').textContent='已載入（尚未儲存）'}
+function render(){const data=config.gradeSubjectConfig[grade]||{};$('grid').innerHTML=SUBJECTS.map(s=>`<div class="cell"><label>${s.zh}</label><input type="number" min="0" data-subject="${s.zh}" value="${data[s.zh]||0}"></div>`).join('')}
+$('save').onclick=async()=>{const values={};document.querySelectorAll('[data-subject]').forEach(el=>values[el.dataset.subject]=Math.max(0,Number(el.value)||0));config.gradeSubjectConfig[grade]=values;$('status').textContent='儲存中…';await ref.set({gradeConfig:config.gradeConfig,gradeSubjectConfig:config.gradeSubjectConfig,specialRules:config.specialRules||[],teacherTargets:config.teacherTargets||{},updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});$('status').textContent='✓ 已儲存'};
+load().catch(e=>$('status').textContent='載入失敗：'+e.message);
+</script>
+</body></html>
