@@ -52,7 +52,7 @@ const DEFAULT_GRADE_MATRIX = {
     6: { 國語: 5, 數學: 4, 綜合: 2, 英語: 3, 社會: 3, 自然: 3, 體育: 2, 健康: 1, 本土: 1, 藝音: 1, 藝視: 1, 藝表: 1 },
 };
 
-const DEFAULT_GRADE_CLASS_COUNT = { 1: 6, 2: 6, 3: 7, 4: 9, 5: 8, 6: 8 };
+const DEFAULT_GRADE_CLASS_COUNT = { 1: 5, 2: 6, 3: 6, 4: 7, 5: 8, 6: 8 };
 
 const DAYS = ['一', '二', '三', '四', '五'];
 const PERIODS = [
