@@ -491,6 +491,12 @@
                                     <button @click="item.role === '主教' ? adjustPeriodOverride(item.cid, batchSubject,  1) : adjustSecondaryPeriod(item.cid, batchSubject, 1)" class="w-5 h-5 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-xs">+</button>
                                 </div>
                                 <button @click="item.role === '主教' ? toggleTeacherClass(item.cid, parseInt(item.cid.charAt(0))) : removeSecondaryTeacher(item.cid, batchSubject, batchTeacherId)" class="ml-2 text-red-400 hover:text-red-600 font-bold">x</button>
+                                <button v-if="item.role === '主教' && getPeriodCount(parseInt(item.cid.charAt(0)), batchSubject) - item.periods > 0 && getAssignment(item.cid, batchSubject).secondary != getHomeroomTeacherId(item.cid)"
+                                    @click="giveRemainingToHomeroom(item.cid, batchSubject)"
+                                    class="ml-1 text-[10px] bg-green-100 text-green-700 hover:bg-green-200 rounded px-1.5 py-0.5 whitespace-nowrap"
+                                    title="把剩下的節數自動配給這個班的導師">
+                                    🏠 剩{{ getPeriodCount(parseInt(item.cid.charAt(0)), batchSubject) - item.periods }}節給導師
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1209,6 +1215,20 @@ createApp({
             assignments.value[cid][subj].secondaryPeriod = defaultPeriod || 1;
             assignments.value[cid][subj].explicit = true;
             saveData();
+        }
+        // 「剩餘節數自動給導師」：你先把主教老師（例如科任）配好、也調整好他要教的節數，
+        // 剩下的節數（總節數 - 主教節數）就自動配給這個班的導師當共授，不用切換身份去操作。
+        function giveRemainingToHomeroom(cid, subj) {
+            const grade = parseInt(cid.charAt(0));
+            const total = getPeriodCount(grade, subj);
+            const primaryPeriod = getPrimaryPeriod(cid, subj);
+            const remaining = total - primaryPeriod;
+            if (remaining <= 0) {
+                alert('目前主教老師的節數已經等於（或超過）這個科目的總節數，沒有剩餘節數可以給導師了。\n若要調整，請先用「已分配」清單裡的 - 按鈕減少主教老師的節數。');
+                return;
+            }
+            const htId = getHomeroomTeacherId(cid);
+            addAsSecondaryTeacher(cid, subj, htId, remaining);
         }
         function getAssignedClassesForTeacher(tid, subj) {
             const result = [];
@@ -2089,7 +2109,7 @@ createApp({
             getAssignment, setAssignment, getEffectivePeriod, adjustPeriodOverride,
             isExplicitAssignment, unlockAssignment,
             toggleTeacherClass, getAssignedClassesForTeacher, isTakenByOther,
-            adjustSecondaryPeriod, removeSecondaryTeacher, addAsSecondaryTeacher, getSecondaryPeriod, getPrimaryPeriod,
+            adjustSecondaryPeriod, removeSecondaryTeacher, addAsSecondaryTeacher, getSecondaryPeriod, getPrimaryPeriod, giveRemainingToHomeroom,
             getTeacherTarget, getRealAssignedCount,
             getTeacherLoad, calculateTargetLoad, getPlacedCount, getTotalAssigned,
             isSystemBlocked, isTeacherBlocked,
