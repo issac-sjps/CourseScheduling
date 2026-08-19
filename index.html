@@ -246,6 +246,7 @@
                         <input type="file" @change="importTeacherCSV" class="hidden" accept=".csv">
                     </label>
                     <button @click="addTeacher" class="btn btn-blue">+ 新增</button>
+                    <button @click="renumberTeacherIds" class="btn btn-gray text-xs" title="把所有老師 ID 重整為 1,2,3... 乾淨序號（會清空配課/課表）">🔢 重新編號</button>
                 </div>
             </div>
             <div class="flex gap-1 mb-3">
@@ -1392,9 +1393,31 @@ createApp({
         function refreshSpecialStatus() { alert('偵測已刷新'); }
 
         // ── 11. TEACHER HELPERS ──────────────────────────────────
+        // 用「目前系統裡最大的 ID + 1」當作序號，避免用 Date.now() 產生的長數字
+        // 在 Excel 開啟 CSV 時被自動轉成科學記號（例如 1.73501E+12）而對不回原本的老師。
+        function nextSequentialTeacherId() {
+            const maxId = teachers.value.reduce((max, t) => {
+                const n = Number(t.id);
+                return Number.isFinite(n) && n > max ? n : max;
+            }, 0);
+            return maxId + 1;
+        }
         function addTeacher() {
-            teachers.value.push({ id: Date.now(), name: '新師', role: '科任', classId: '', baseLoad: 20, priority: 10, constraints: [], isGradeDirector: false });
+            teachers.value.push({ id: nextSequentialTeacherId(), name: '新師', role: '科任', classId: '', baseLoad: 20, priority: 10, constraints: [], isGradeDirector: false });
             saveData();
+        }
+        // 把目前所有老師的 ID 整理成乾淨的序號 1,2,3...（依目前清單順序）。
+        // 因為 ID 改變後，配課(assignments)與課表(scheduleData)裡存的 teacherId 一定會對不上，
+        // 所以這裡會一併清空配課與課表 — 只適合「反正要重新配課」的情況下使用。
+        function renumberTeacherIds() {
+            if (!confirm('⚠️ 這會把所有老師的 ID 重新編成 1、2、3...的乾淨序號。\n\n因為 ID 會改變，目前的「配課設定」與「課表」會被清空（老師資料本身不會動），之後請重新配課。\n\n確定要繼續嗎？')) return;
+            const renumbered = teachers.value.map((t, idx) => ({ ...t, id: idx + 1 }));
+            teachers.value = renumbered;
+            assignments.value    = {};
+            scheduleData.value   = {};
+            teacherTargets.value = {};
+            saveData();
+            alert('✅ 已重新編號完成！配課與課表已清空，請重新設定配課。記得按右下角「立即儲存」。');
         }
 
         // ── 教師名單拖曳排序 ──────────────────────────────────
@@ -1464,9 +1487,15 @@ createApp({
             if (!file || !confirm(confirmMsg)) return;
             const reader = new FileReader();
             reader.onload = (ev) => {
-                const lines = ev.target.result.split('\n');
+                const rawText = ev.target.result;
+                // 偵測 ID 欄位是否疑似被 Excel 轉成科學記號（例如 1.73501E+12），
+                // 這種情況匯入會對不到原本老師，配課/課表會全部失聯，先擋下來提醒。
+                if (/\b\d\.\d+E\+\d+\b/i.test(rawText)) {
+                    if (!confirm('⚠️ 偵測到 ID 欄位疑似被 Excel 轉成科學記號（例如 1.73E+12），這樣匯入會讓配課與課表對不到原本的老師！\n\n建議按「取消」，改用記事本或 Google 試算表編輯 CSV 後再匯入。\n\n若仍要強制匯入請按「確定」（無法對應的老師會被當成新老師處理）。')) return;
+                }
+                const lines = rawText.split('\n');
                 const existingIds = new Set(teachers.value.map(t => t.id));
-                let nextNewId = Date.now();
+                let nextNewId = nextSequentialTeacherId();
                 const newTeachers = [];
                 for (let i = 1; i < lines.length; i++) {
                     const line = lines[i].trim();
@@ -1476,7 +1505,8 @@ createApp({
                     const csvId = cols[9]?.trim();
                     // 只有當 CSV 裡的 id 跟目前系統裡某位老師的 id 完全對得上時，才沿用該 id，
                     // 這樣配課(assignments)和課表(scheduleData)裡存的 teacherId 才不會失聯。
-                    // 對不上（例如全新老師、或 id 欄位是空的）就給一個新的、保證不重複的 id。
+                    // 對不上（例如全新老師、或 id 欄位是空的）就給一個新的、保證不重複的 id（序號遞增，不用 Date.now()，
+                    // 避免下次匯出的 CSV 又出現 Excel 會轉成科學記號的長數字）。
                     // 若勾選「全新匯入」，則完全不比對，一律當新老師處理。
                     const normalizedCsvId = csvId && !isNaN(csvId) ? Number(csvId) : csvId;
                     const id = (!isFresh && normalizedCsvId && existingIds.has(normalizedCsvId)) ? normalizedCsvId : nextNewId++;
@@ -1811,7 +1841,7 @@ createApp({
             saveCell, saveTeacherScheduleCell, deleteCell, clearAllSchedule,
             addSpecialRule, refreshSpecialStatus,
             runGlobalAutoFill, runRuleValidation,
-            addTeacher, regenerateTeachers, resetAllData,
+            addTeacher, renumberTeacherIds, regenerateTeachers, resetAllData,
             dragTeacherIdx, dragOverTeacherIdx, onTeacherDragStart, onTeacherDragOver, onTeacherDrop, onTeacherDragEnd,
             exportTeacherCSV, importTeacherCSV,
             saveData, saveNow, doPrint,
