@@ -77,6 +77,11 @@
         .class-btn { border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 8px; text-align: center; cursor: pointer; transition: all 0.1s; user-select: none; display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 80px; }
         .class-btn.active   { background-color: #2563eb; color: white; border-color: #2563eb; font-weight: bold; }
         .class-btn.disabled { opacity: 0.4; cursor: not-allowed; background-color: #f9fafb; }
+        .class-btn-sm { min-width: 52px; padding: 3px 4px; }
+        .class-btn-sm .font-bold { font-size: 11px; }
+        .teacher-grade-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 4px; }
+        .picker-summary-bar { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .role-group-header { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 4px; }
         .mini-btn { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(255,255,255,0.3); color: white; font-size: 0.7rem; }
         .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.1); }
         .dot-green { background: #22c55e; box-shadow: 0 0 5px #22c55e; }
@@ -358,29 +363,42 @@
 
             <!-- 教師視角 -->
             <div v-if="assignMode === 'teacher'" class="bg-white p-6 rounded shadow border-t-4 border-indigo-500">
-                <div class="mb-4">
-                    <h4 class="font-bold mb-2">1. 選擇老師</h4>
-                    <div class="space-y-2">
-                        <div v-for="role in ['主任','組長','科任']" :key="role" class="flex gap-2">
-                            <div class="w-10 text-xs font-bold pt-2">{{ role }}</div>
-                            <div class="flex flex-wrap gap-1">
-                                <button v-for="t in getTeachersByRoleGroup(role)" :key="t.id"
-                                    @click="batchTeacherId = t.id" class="select-btn"
-                                    :class="{'active': batchTeacherId === t.id}">
-                                    {{ t.name }}
-                                    <span class="text-[10px] ml-1 opacity-70">({{ getTeacherLoad(t.id) }}/{{ calculateTargetLoad(t) }})</span>
-                                </button>
+
+                <!-- 已選摘要列（選好老師+科目後自動收合上方，點「變更」可展開重選） -->
+                <div v-if="batchTeacherId && batchSubject && pickerCollapsed" class="picker-summary-bar mb-4">
+                    <span class="text-sm">👨‍🏫 老師：<b class="text-indigo-700">{{ getTeacherName(batchTeacherId) }}</b></span>
+                    <span class="text-sm">📘 科目：<b :class="getSubjectColor(batchSubject)" class="px-2 py-0.5 rounded">{{ batchSubject }}</b></span>
+                    <button @click="pickerCollapsed = false" class="ml-auto text-xs bg-white border rounded px-3 py-1 hover:bg-gray-50">🔄 變更老師/科目</button>
+                </div>
+
+                <div v-show="!pickerCollapsed || !batchTeacherId || !batchSubject">
+                    <div class="mb-4">
+                        <h4 class="font-bold mb-2">1. 選擇老師</h4>
+                        <div class="space-y-2">
+                            <div v-for="role in ['主任','組長','科任']" :key="role" class="flex gap-2">
+                                <div class="w-14 text-xs font-bold pt-2 role-group-header" @click="toggleRoleGroup(role)">
+                                    <span>{{ openRoles[role] ? '▾' : '▸' }}</span>{{ role }}
+                                </div>
+                                <div class="flex flex-wrap gap-1" v-show="openRoles[role]">
+                                    <button v-for="t in getTeachersByRoleGroup(role)" :key="t.id"
+                                        @click="pickTeacher(t.id)" class="select-btn"
+                                        :class="{'active': batchTeacherId === t.id}">
+                                        {{ t.name }}
+                                        <span class="text-[10px] ml-1 opacity-70">({{ getTeacherLoad(t.id) }}/{{ calculateTargetLoad(t) }})</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                <div class="mb-6 border-t pt-4">
-                    <h4 class="font-bold mb-2">2. 選擇科目</h4>
-                    <div class="flex flex-wrap gap-1">
-                        <button v-for="s in subjects" :key="s.zh" @click="batchSubject = s.zh"
-                            class="select-btn" :class="[batchSubject === s.zh ? 'active' : '', getSubjectColor(s.zh)]">{{ s.zh }}</button>
+                    <div class="mb-6 border-t pt-4">
+                        <h4 class="font-bold mb-2">2. 選擇科目</h4>
+                        <div class="flex flex-wrap gap-1">
+                            <button v-for="s in subjects" :key="s.zh" @click="pickSubject(s.zh)"
+                                class="select-btn" :class="[batchSubject === s.zh ? 'active' : '', getSubjectColor(s.zh)]">{{ s.zh }}</button>
+                        </div>
                     </div>
                 </div>
+
                 <div v-if="batchTeacherId && batchSubject" class="border-t pt-4">
                     <h4 class="font-bold text-blue-800 text-lg mb-2">3. 分配 {{ getTeacherName(batchTeacherId) }} 的「{{ batchSubject }}」</h4>
                     <div class="bg-blue-50 p-4 rounded mb-4" v-if="getAssignedClassesForTeacher(batchTeacherId, batchSubject).length > 0">
@@ -398,12 +416,12 @@
                             </div>
                         </div>
                     </div>
-                    <div v-for="g in 6" :key="g" class="flex items-center gap-4 py-2 border-b border-dashed">
-                        <div class="w-12 font-bold text-sm">{{ g }}年</div>
-                        <div class="flex-1 flex flex-wrap gap-2">
+                    <div v-for="g in 6" :key="g" class="flex items-start gap-3 py-1.5 border-b border-dashed">
+                        <div class="w-10 font-bold text-sm pt-1 shrink-0">{{ g }}年</div>
+                        <div class="flex-1 teacher-grade-grid">
                             <div v-for="cls in getClassListByGrade(g)" :key="cls.id"
                                 @click="isTakenByOther(cls.id, batchSubject, batchTeacherId) ? null : toggleTeacherClass(cls.id, g)"
-                                class="class-btn w-16"
+                                class="class-btn class-btn-sm"
                                 :class="{'active': getAssignment(cls.id, batchSubject).primary == batchTeacherId, 'disabled': getPeriodCount(g, batchSubject) === 0 || isTakenByOther(cls.id, batchSubject, batchTeacherId)}"
                                 :title="isTakenByOther(cls.id, batchSubject, batchTeacherId) ? ('已由 ' + getTeacherName(getAssignment(cls.id, batchSubject).primary) + ' 任教，不可重複配課') : ''">
                                 <div class="font-bold text-xs">{{ cls.name }}</div>
@@ -936,6 +954,11 @@ createApp({
         const statsFilter       = ref('all');
         const batchSubject      = ref('國語');
         const batchTeacherId    = ref(null);
+        const openRoles         = ref({ '主任': true, '組長': true, '科任': true });
+        const pickerCollapsed   = ref(false);
+        const toggleRoleGroup = (role) => { openRoles.value[role] = !openRoles.value[role]; };
+        const pickTeacher = (tid) => { batchTeacherId.value = tid; if (batchSubject.value) pickerCollapsed.value = true; };
+        const pickSubject = (subj) => { batchSubject.value = subj; if (batchTeacherId.value) pickerCollapsed.value = true; };
         const activeMatrixCell  = ref(null);
         const selectedClass     = ref('101');
         const selectedTeacherId = ref(null);
@@ -1776,6 +1799,7 @@ createApp({
             teachers, gradeConfig, scheduleData, specialRules, newRule,
             selectedClass, selectedTeacherId, queryMode, queryTarget,
             showModal, modalData, statsFilter, batchSubject, batchTeacherId,
+            openRoles, pickerCollapsed, toggleRoleGroup, pickTeacher, pickSubject,
             teacherTargets, activeMatrixCell, todayStr,
             classList, specialistTeachers, printPages, filteredStatsTeachers,
             systemRules, totalAssignedSpecialistSlots, isAssignmentReady,
