@@ -481,28 +481,35 @@
                     <div class="bg-blue-50 p-4 rounded mb-4" v-if="getAssignedClassesForTeacher(batchTeacherId, batchSubject).length > 0">
                         <div class="font-bold text-sm text-blue-900 mb-2">已分配 (微調):</div>
                         <div class="flex flex-wrap gap-3">
-                            <div v-for="item in getAssignedClassesForTeacher(batchTeacherId, batchSubject)" :key="item.cid"
+                            <div v-for="item in getAssignedClassesForTeacher(batchTeacherId, batchSubject)" :key="item.cid + item.role"
                                 class="bg-white border border-blue-200 rounded px-3 py-1 flex items-center gap-2 shadow-sm">
                                 <span class="font-bold text-blue-800">{{ item.name }}</span>
+                                <span class="text-[10px] px-1 rounded" :class="item.role === '主教' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'">{{ item.role }}</span>
                                 <div class="flex items-center gap-1 bg-gray-100 rounded px-1">
-                                    <button @click="adjustPeriodOverride(item.cid, batchSubject, -1)" class="w-5 h-5 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-xs">-</button>
+                                    <button @click="item.role === '主教' ? adjustPeriodOverride(item.cid, batchSubject, -1) : adjustSecondaryPeriod(item.cid, batchSubject, -1)" class="w-5 h-5 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-xs">-</button>
                                     <span class="text-sm font-mono w-4 text-center">{{ item.periods }}</span>
-                                    <button @click="adjustPeriodOverride(item.cid, batchSubject,  1)" class="w-5 h-5 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-xs">+</button>
+                                    <button @click="item.role === '主教' ? adjustPeriodOverride(item.cid, batchSubject,  1) : adjustSecondaryPeriod(item.cid, batchSubject, 1)" class="w-5 h-5 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-xs">+</button>
                                 </div>
-                                <button @click="toggleTeacherClass(item.cid, parseInt(item.cid.charAt(0)))" class="ml-2 text-red-400 hover:text-red-600 font-bold">x</button>
+                                <button @click="item.role === '主教' ? toggleTeacherClass(item.cid, parseInt(item.cid.charAt(0))) : removeSecondaryTeacher(item.cid, batchSubject, batchTeacherId)" class="ml-2 text-red-400 hover:text-red-600 font-bold">x</button>
                             </div>
                         </div>
                     </div>
                     <div v-for="g in 6" :key="g" class="flex items-center gap-4 py-2 border-b border-dashed">
                         <div class="w-12 font-bold text-sm">{{ g }}年</div>
                         <div class="flex-1 flex flex-wrap gap-2">
-                            <div v-for="cls in getClassListByGrade(g)" :key="cls.id"
-                                @click="isTakenByOther(cls.id, batchSubject, batchTeacherId) ? null : toggleTeacherClass(cls.id, g)"
-                                class="class-btn w-16"
-                                :class="{'active': getAssignment(cls.id, batchSubject).primary == batchTeacherId, 'disabled': getPeriodCount(g, batchSubject) === 0 || isTakenByOther(cls.id, batchSubject, batchTeacherId)}"
-                                :title="isTakenByOther(cls.id, batchSubject, batchTeacherId) ? ('已由 ' + getTeacherName(getAssignment(cls.id, batchSubject).primary) + ' 任教，不可重複配課') : ''">
-                                <div class="font-bold text-xs">{{ cls.name }}</div>
-                                <div v-if="isTakenByOther(cls.id, batchSubject, batchTeacherId)" class="text-[9px] text-gray-400 leading-none">{{ getTeacherName(getAssignment(cls.id, batchSubject).primary) }}</div>
+                            <div v-for="cls in getClassListByGrade(g)" :key="cls.id" class="relative">
+                                <div @click="isTakenByOther(cls.id, batchSubject, batchTeacherId) ? null : toggleTeacherClass(cls.id, g)"
+                                    class="class-btn w-16"
+                                    :class="{'active': getAssignment(cls.id, batchSubject).primary == batchTeacherId, 'disabled': getPeriodCount(g, batchSubject) === 0 || isTakenByOther(cls.id, batchSubject, batchTeacherId)}"
+                                    :title="isTakenByOther(cls.id, batchSubject, batchTeacherId) ? ('已由 ' + getTeacherName(getAssignment(cls.id, batchSubject).primary) + ' 任教，不可重複配課；可點右上角🤝加為共授老師') : ''">
+                                    <div class="font-bold text-xs">{{ cls.name }}</div>
+                                    <div v-if="isTakenByOther(cls.id, batchSubject, batchTeacherId)" class="text-[9px] text-gray-400 leading-none">{{ getTeacherName(getAssignment(cls.id, batchSubject).primary) }}</div>
+                                </div>
+                                <button v-if="getPeriodCount(g, batchSubject) > 0 && isTakenByOther(cls.id, batchSubject, batchTeacherId) && getAssignment(cls.id, batchSubject).secondary != batchTeacherId"
+                                    @click.stop="addAsSecondaryTeacher(cls.id, batchSubject, batchTeacherId, 1)"
+                                    class="absolute -top-1 -right-1 text-[10px] bg-amber-400 hover:bg-amber-500 text-white rounded-full w-4 h-4 flex items-center justify-center leading-none"
+                                    title="加為共授老師（例如導師上4節、科任共授2節）">🤝</button>
+                                <div v-if="getAssignment(cls.id, batchSubject).secondary == batchTeacherId" class="text-[9px] text-amber-600 text-center leading-none mt-0.5">共授{{ getSecondaryPeriod(cls.id, batchSubject) }}節</div>
                             </div>
                         </div>
                     </div>
@@ -1101,16 +1108,35 @@ createApp({
         function getAssignment(cid, subj) {
             const entry = assignments.value[cid]?.[subj];
             if (entry) return entry;
-            return { primary: getHomeroomTeacherId(cid), secondary: null, override: null, explicit: false };
+            return { primary: getHomeroomTeacherId(cid), secondary: null, override: null, secondaryPeriod: null, explicit: false };
         }
         function setAssignment(cid, subj, type, val) {
             if (!assignments.value[cid]) assignments.value[cid] = {};
             if (!assignments.value[cid][subj]) {
-                assignments.value[cid][subj] = { primary: getHomeroomTeacherId(cid), secondary: null, override: null, explicit: false };
+                assignments.value[cid][subj] = { primary: getHomeroomTeacherId(cid), secondary: null, override: null, secondaryPeriod: null, explicit: false };
             }
             assignments.value[cid][subj][type] = val ? parseInt(val) : null;
             assignments.value[cid][subj].explicit = true; // 使用者親自選過，之後在班級視角會反灰鎖住
             saveData();
+        }
+        // 共授設定：清掉「共授老師」時，順便清掉共授節數，避免留下孤兒數字
+        function clearSecondaryTeacher(cid, subj) {
+            if (!assignments.value[cid]?.[subj]) return;
+            assignments.value[cid][subj].secondary = null;
+            assignments.value[cid][subj].secondaryPeriod = null;
+            saveData();
+        }
+        // 該科目/班級「主教老師」實際節數：若有手動設定 override 就用 override，
+        // 否則用「該科目總節數 - 共授老師節數」（沒設共授就是總節數）
+        function getPrimaryPeriod(cid, subj) {
+            const assign = getAssignment(cid, subj);
+            const grade  = parseInt(cid.charAt(0));
+            const total  = getPeriodCount(grade, subj);
+            if (assign.override !== null) return assign.override;
+            return total - (assign.secondaryPeriod || 0);
+        }
+        function getSecondaryPeriod(cid, subj) {
+            return getAssignment(cid, subj).secondaryPeriod || 0;
         }
         // 這一格是否為「使用者手動選過」的配課（而不是導師的自動預設）
         function isExplicitAssignment(cid, subj) {
@@ -1133,13 +1159,25 @@ createApp({
         function adjustPeriodOverride(cid, subj, delta) {
             const assign = getAssignment(cid, subj);
             const grade  = parseInt(cid.charAt(0));
-            let cur = assign.override !== null ? assign.override : getPeriodCount(grade, subj);
+            let cur = assign.override !== null ? assign.override : getPeriodCount(grade, subj) - (assign.secondaryPeriod || 0);
             // 微調節數本身就是一種「手動決定」，所以要確保這筆紀錄真的被寫進資料庫（否則沒東西可以改）
             if (!assignments.value[cid]) assignments.value[cid] = {};
             if (!assignments.value[cid][subj]) {
-                assignments.value[cid][subj] = { primary: assign.primary, secondary: assign.secondary, override: null, explicit: true };
+                assignments.value[cid][subj] = { primary: assign.primary, secondary: assign.secondary, override: null, secondaryPeriod: assign.secondaryPeriod || null, explicit: true };
             }
             assignments.value[cid][subj].override = Math.max(0, cur + delta);
+            assignments.value[cid][subj].explicit = true;
+            saveData();
+        }
+        // 調整「共授老師」的節數（跟主教老師的 override 分開存，互不影響）
+        function adjustSecondaryPeriod(cid, subj, delta) {
+            const assign = getAssignment(cid, subj);
+            if (!assignments.value[cid]) assignments.value[cid] = {};
+            if (!assignments.value[cid][subj]) {
+                assignments.value[cid][subj] = { primary: assign.primary, secondary: assign.secondary, override: assign.override, secondaryPeriod: null, explicit: true };
+            }
+            const cur = assignments.value[cid][subj].secondaryPeriod || 0;
+            assignments.value[cid][subj].secondaryPeriod = Math.max(0, cur + delta);
             assignments.value[cid][subj].explicit = true;
             saveData();
         }
@@ -1155,16 +1193,32 @@ createApp({
             const assign = getAssignment(cid, subj);
             return assign.primary != tid && assign.primary != getHomeroomTeacherId(cid);
         }
+        // 把某老師從「共授」欄位移除（只清共授，不動主教）
+        function removeSecondaryTeacher(cid, subj, tid) {
+            const assign = getAssignment(cid, subj);
+            if (assign.secondary == tid) clearSecondaryTeacher(cid, subj);
+        }
+        // 在「教師視角」把目前老師加進某班某科目當「共授」老師（不影響原本的主教老師）
+        function addAsSecondaryTeacher(cid, subj, tid, defaultPeriod) {
+            if (!assignments.value[cid]) assignments.value[cid] = {};
+            const assign = getAssignment(cid, subj);
+            if (!assignments.value[cid][subj]) {
+                assignments.value[cid][subj] = { primary: assign.primary, secondary: null, override: null, secondaryPeriod: null, explicit: true };
+            }
+            assignments.value[cid][subj].secondary = tid;
+            assignments.value[cid][subj].secondaryPeriod = defaultPeriod || 1;
+            assignments.value[cid][subj].explicit = true;
+            saveData();
+        }
         function getAssignedClassesForTeacher(tid, subj) {
-            return Object.keys(assignments.value)
-                .filter(cid => assignments.value[cid][subj]?.primary == tid)
-                .map(cid => {
-                    const grade = parseInt(cid.charAt(0));
-                    const p = assignments.value[cid][subj].override !== null
-                        ? assignments.value[cid][subj].override
-                        : getPeriodCount(grade, subj);
-                    return { cid, name: cid, periods: p };
-                });
+            const result = [];
+            for (const cid in assignments.value) {
+                const a = assignments.value[cid][subj];
+                if (!a) continue;
+                if (a.primary == tid) result.push({ cid, name: cid, periods: getPrimaryPeriod(cid, subj), role: '主教' });
+                if (a.secondary == tid) result.push({ cid, name: cid, periods: getSecondaryPeriod(cid, subj), role: '共授' });
+            }
+            return result;
         }
 
         // ── 快捷設定（03.配課設定）─────────────────────────────
@@ -1259,9 +1313,13 @@ createApp({
             let count = 0;
             for (const cid in assignments.value) {
                 const assign = assignments.value[cid][subj];
-                if (assign && assign.primary === tid) {
-                    const grade = parseInt(cid.charAt(0));
-                    count += (assign.override !== null ? assign.override : getPeriodCount(grade, subj));
+                if (!assign) continue;
+                const grade = parseInt(cid.charAt(0));
+                if (assign.primary === tid) {
+                    count += (assign.override !== null ? assign.override : getPeriodCount(grade, subj) - (assign.secondaryPeriod || 0));
+                }
+                if (assign.secondary === tid) {
+                    count += (assign.secondaryPeriod || 0);
                 }
             }
             return count;
@@ -1274,8 +1332,9 @@ createApp({
                 for (const cls of getClassListByGrade(g)) {
                     for (const s of getGradeActiveSubjects(g)) {
                         const assign = getAssignment(cls.id, s.zh); // 未手動指定就自動當導師，不看資料庫是否真的有存
-                        if (assign.primary != tid) continue;
-                        const target = assign.override !== null ? assign.override : getPeriodCount(g, s.zh);
+                        const role = assign.primary == tid ? 'primary' : (assign.secondary == tid ? 'secondary' : null);
+                        if (!role) continue;
+                        const target = role === 'primary' ? getPrimaryPeriod(cls.id, s.zh) : getSecondaryPeriod(cls.id, s.zh);
                         let placed = 0;
                         const clsData = scheduleData.value[cls.id];
                         if (clsData) {
@@ -1307,7 +1366,8 @@ createApp({
             }
             return count;
         }
-        // 該老師依配課設定應排幾節（含「沒被特別指定、自動歸導師」的科目，不再只看資料庫裡有沒有存紀錄）
+        // 該老師依配課設定應排幾節（含「沒被特別指定、自動歸導師」的科目，不再只看資料庫裡有沒有存紀錄；
+        // 也會把「共授」節數算進去，例如導師教4節+科任共授2節，兩邊的應授節數都會正確反映）
         function getTotalAssigned(tid) {
             let count = 0;
             for (const g of [1,2,3,4,5,6]) {
@@ -1315,7 +1375,10 @@ createApp({
                     for (const s of getGradeActiveSubjects(g)) {
                         const assign = getAssignment(cls.id, s.zh);
                         if (assign.primary == tid) {
-                            count += (assign.override !== null ? assign.override : getPeriodCount(g, s.zh));
+                            count += getPrimaryPeriod(cls.id, s.zh);
+                        }
+                        if (assign.secondary == tid) {
+                            count += getSecondaryPeriod(cls.id, s.zh);
                         }
                     }
                 }
@@ -1494,8 +1557,13 @@ createApp({
                 for (const subj in assignments.value[cid]) {
                     const assign = assignments.value[cid][subj];
                     if (assign.primary && assign.primary != htId) {
-                        const pCount = assign.override !== null ? assign.override : getPeriodCount(grade, subj);
+                        const pCount = getPrimaryPeriod(cid, subj);
                         if (pCount > 0) tasks.push({ cid, grade, subj, tid: assign.primary, count: pCount });
+                    }
+                    // 共授老師（例如導師教4節、科任共授2節）也要排進自動排課的任務清單
+                    if (assign.secondary && assign.secondary != htId) {
+                        const sCount = assign.secondaryPeriod || 0;
+                        if (sCount > 0) tasks.push({ cid, grade, subj, tid: assign.secondary, count: sCount });
                     }
                 }
             }
@@ -1897,21 +1965,31 @@ createApp({
             let count = 0;
             for (const cid in assignments.value) {
                 const htId  = getHomeroomTeacherId(cid);
-                const grade = parseInt(cid.charAt(0));
                 for (const subj in assignments.value[cid]) {
                     const assign = assignments.value[cid][subj];
-                    if (!assign.primary || assign.primary == htId) continue;
-                    const pCount = assign.override !== null ? assign.override : getPeriodCount(grade, subj);
-                    if (pCount <= 0) continue;
-                    let placed = 0;
                     const clsData = scheduleData.value[cid];
-                    if (clsData) {
-                        for (const d in clsData) for (const p in clsData[d]) {
+                    const countPlacedFor = (tid) => {
+                        let placed = 0;
+                        if (clsData) for (const d in clsData) for (const p in clsData[d]) {
                             const cell = clsData[d][p];
-                            if (cell?.subject === subj && cell?.teacherId == assign.primary) placed++;
+                            if (cell?.subject === subj && cell?.teacherId == tid) placed++;
+                        }
+                        return placed;
+                    };
+                    if (assign.primary && assign.primary != htId) {
+                        const pCount = getPrimaryPeriod(cid, subj);
+                        if (pCount > 0) {
+                            const placed = countPlacedFor(assign.primary);
+                            if (placed < pCount) count += (pCount - placed);
                         }
                     }
-                    if (placed < pCount) count += (pCount - placed);
+                    if (assign.secondary && assign.secondary != htId) {
+                        const sCount = assign.secondaryPeriod || 0;
+                        if (sCount > 0) {
+                            const placed = countPlacedFor(assign.secondary);
+                            if (placed < sCount) count += (sCount - placed);
+                        }
+                    }
                 }
             }
             return count;
@@ -2011,6 +2089,7 @@ createApp({
             getAssignment, setAssignment, getEffectivePeriod, adjustPeriodOverride,
             isExplicitAssignment, unlockAssignment,
             toggleTeacherClass, getAssignedClassesForTeacher, isTakenByOther,
+            adjustSecondaryPeriod, removeSecondaryTeacher, addAsSecondaryTeacher, getSecondaryPeriod, getPrimaryPeriod,
             getTeacherTarget, getRealAssignedCount,
             getTeacherLoad, calculateTargetLoad, getPlacedCount, getTotalAssigned,
             isSystemBlocked, isTeacherBlocked,
