@@ -341,6 +341,9 @@
                                 <th class="p-1 border">科目2</th>
                                 <th class="p-1 border">班級</th>
                                 <th class="p-1 border w-14">節數</th>
+                                <th class="p-1 border">科目3</th>
+                                <th class="p-1 border">班級</th>
+                                <th class="p-1 border w-14">節數</th>
                                 <th class="p-1 border w-40">狀態</th>
                                 <th class="p-1 border w-24">操作</th>
                             </tr>
@@ -369,6 +372,14 @@
                                 </td>
                                 <td class="p-1"><input v-model="row.c2" placeholder="例:401.402" class="compact-select" style="max-width:100px"></td>
                                 <td class="p-1"><input v-model="row.p2" type="number" placeholder="預設" class="compact-select" style="max-width:56px"></td>
+                                <td class="p-1">
+                                    <select v-model="row.s3" class="compact-select" :class="getSubjectColor(row.s3)">
+                                        <option value="">-</option>
+                                        <option v-for="s in subjects" :key="s.zh" :value="s.zh">{{ s.zh }}</option>
+                                    </select>
+                                </td>
+                                <td class="p-1"><input v-model="row.c3" placeholder="例:401.402" class="compact-select" style="max-width:100px"></td>
+                                <td class="p-1"><input v-model="row.p3" type="number" placeholder="預設" class="compact-select" style="max-width:56px"></td>
                                 <td class="p-1">
                                     <div v-if="previewQuickRow(row).errors.length" class="text-red-600">
                                         <div v-for="(err, ei) in previewQuickRow(row).errors" :key="ei" class="leading-tight mb-0.5">⚠ {{ err.subj }} {{ err.cid }}：{{ err.reason }}</div>
@@ -1024,7 +1035,7 @@ createApp({
         const activeMatrixCell  = ref(null);
         const selectedClass     = ref('101');
         const selectedTeacherId = ref(null);
-        function newQuickRow() { return { teacherId: null, s1: '', c1: '', p1: '', s2: '', c2: '', p2: '', lastResult: null }; }
+        function newQuickRow() { return { teacherId: null, s1: '', c1: '', p1: '', s2: '', c2: '', p2: '', s3: '', c3: '', p3: '', lastResult: null }; }
         const quickRows = ref([newQuickRow()]);
         const quickApplySummary = ref(null);
         const queryMode   = ref('class_single');
@@ -1201,7 +1212,8 @@ createApp({
         function previewQuickRow(row) {
             const r1 = checkQuickSlot(row.teacherId, row.s1, row.c1, row.p1);
             const r2 = checkQuickSlot(row.teacherId, row.s2, row.c2, row.p2);
-            return { valid: [...r1.valid, ...r2.valid], errors: [...r1.errors, ...r2.errors] };
+            const r3 = checkQuickSlot(row.teacherId, row.s3, row.c3, row.p3);
+            return { valid: [...r1.valid, ...r2.valid, ...r3.valid], errors: [...r1.errors, ...r2.errors, ...r3.errors] };
         }
         function applyValidQuickItems(validItems) {
             validItems.forEach(item => {
