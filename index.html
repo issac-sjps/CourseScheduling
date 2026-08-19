@@ -587,10 +587,21 @@
                     <button class="btn btn-blue" @click="refreshSpecialStatus">刷新偵測</button>
                 </div>
                 <div class="flex gap-2 mb-4 items-end bg-orange-50 p-3 rounded flex-wrap">
-                    <div class="flex-1 min-w-[120px]"><label class="block font-bold text-xs mb-1">原因</label><input v-model="newRule.name" class="w-full border p-1 rounded text-sm"></div>
-                    <div class="flex-1 min-w-[120px]"><label class="block font-bold text-xs mb-1">班級 (空格分開)</label><input v-model="newRule.classes" class="w-full border p-1 rounded text-sm"></div>
+                    <div class="flex-1 min-w-[120px]"><label class="block font-bold text-xs mb-1">原因</label><input v-model="newRule.name" class="w-full border p-1 rounded text-sm" placeholder="例：客語課、綜合課"></div>
+                    <div class="flex-1 min-w-[220px]"><label class="block font-bold text-xs mb-1">班級（用「.」「,」或空白分隔，可用簡寫如 501-8）</label><input v-model="newRule.classes" class="w-full border p-1 rounded text-sm" placeholder="例：501-8.601-8"></div>
                     <div class="w-24"><label class="block font-bold text-xs mb-1">星期</label><select v-model="newRule.day" class="w-full border p-1 rounded text-sm"><option v-for="d in days" :value="d">{{ d }}</option></select></div>
-                    <div class="w-24"><label class="block font-bold text-xs mb-1">節次</label><select v-model="newRule.period" class="w-full border p-1 rounded text-sm"><option v-for="p in periods" :value="p.idx">{{ p.idx }}</option></select></div>
+                    <div>
+                        <label class="block font-bold text-xs mb-1">節次（可複選）</label>
+                        <div class="flex gap-1">
+                            <label v-for="p in periods" :key="p.idx" class="flex items-center gap-0.5 border rounded px-1.5 py-1 text-xs cursor-pointer"
+                                :class="newRule.periods.includes(p.idx) ? 'bg-orange-500 text-white border-orange-500' : 'bg-white'">
+                                <input type="checkbox" :value="p.idx" v-model="newRule.periods" class="hidden">{{ p.idx }}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div v-if="newRule.classes" class="text-xs text-gray-500 mb-3 -mt-2">
+                    展開後共 {{ parseClassRangeInput(newRule.classes).length }} 班：{{ parseClassRangeInput(newRule.classes).join('、') }}
                 </div>
                 <div class="space-y-2">
                     <div v-for="(rule, idx) in specialRules" :key="idx" class="bg-white border rounded p-3 flex justify-between items-center shadow-sm">
@@ -1041,7 +1052,7 @@ createApp({
         const remoteDocIds = { teachers: new Set(), assignments: new Set(), schedules: new Set() };
         let remoteRefreshTimer = null;
 
-        const newRule = ref({ name:'', classes:'', day:'二', period: 3 });
+        const newRule = ref({ name:'', classes:'', day:'二', periods: [] });
         const statsFilter       = ref('all');
         const batchSubject      = ref('國語');
         const batchTeacherId    = ref(null);
@@ -1644,14 +1655,53 @@ createApp({
         }
 
         // ── 10. SPECIAL RULES ────────────────────────────────────
+        // 把「501-8」這種簡寫展開成 501,502...508；「501-508」這種完整寫法也支援。
+        // 沒有「-」的單一班級代碼（例如「501」）就直接原樣使用。
+        function expandClassToken(token) {
+            token = token.trim();
+            if (!token) return [];
+            if (!token.includes('-')) return [token];
+            const [left, right] = token.split('-');
+            if (!left || !right || isNaN(right)) return [token]; // 格式不對就當原始字串處理，不硬猜
+            let prefix, startNum, pad;
+            if (right.length >= left.length) {
+                // 完整寫法，例如 501-508
+                prefix = ''; pad = left.length; startNum = parseInt(left);
+            } else {
+                // 簡寫，例如 501-8：保留前面「50」，只展開最後一碼 1~8
+                pad = right.length;
+                prefix = left.slice(0, left.length - pad);
+                startNum = parseInt(left.slice(left.length - pad));
+            }
+            const endNum = parseInt(right);
+            const result = [];
+            for (let i = startNum; i <= endNum; i++) result.push(prefix + String(i).padStart(pad, '0'));
+            return result;
+        }
+        // 班級欄位可以用「.」「,」或空白分隔多筆，每一筆都可以是單一班級或上面的簡寫範圍
+        function parseClassRangeInput(str) {
+            if (!str) return [];
+            const tokens = str.split(/[.,\s]+/).map(s => s.trim()).filter(Boolean);
+            let result = [];
+            tokens.forEach(t => { result = result.concat(expandClassToken(t)); });
+            return [...new Set(result)];
+        }
         function addSpecialRule() {
             if (!newRule.value.classes) return alert('請輸入班級');
-            specialRules.value.push({
-                name: newRule.value.name || '特殊',
-                classes: newRule.value.classes.replace(/,/g, ' ').split(' ').filter(c => c),
-                day: newRule.value.day,
-                period: newRule.value.period,
+            if (!newRule.value.periods.length) return alert('請至少勾選一個節次');
+            const classes = parseClassRangeInput(newRule.value.classes);
+            const unknown = classes.filter(cid => !classList.value.find(c => c.id === cid));
+            if (unknown.length && !confirm(`⚠️ 這些班級代碼系統裡找不到，仍要新增嗎？\n${unknown.join(', ')}`)) return;
+            // 有勾選幾個節次，就新增幾筆規則（同一個原因/班級/星期，節次分開存）
+            newRule.value.periods.forEach(p => {
+                specialRules.value.push({
+                    name: newRule.value.name || '特殊',
+                    classes,
+                    day: newRule.value.day,
+                    period: p,
+                });
             });
+            newRule.value = { name: newRule.value.name, classes: newRule.value.classes, day: newRule.value.day, periods: [] };
             saveData();
         }
         function refreshSpecialStatus() { alert('偵測已刷新'); }
@@ -2093,7 +2143,7 @@ createApp({
         // ── RETURN ────────────────────────────────────────────────
         return {
             currentTab, currentWorkspace, workspaces, tabs, workspaceTabs, selectWorkspace, assignMode, days, periods, subjects,
-            teachers, gradeConfig, scheduleData, specialRules, newRule,
+            teachers, gradeConfig, scheduleData, specialRules, newRule, parseClassRangeInput,
             selectedClass, selectedTeacherId, queryMode, queryTarget,
             showModal, modalData, statsFilter, batchSubject, batchTeacherId,
             quickRows, quickApplySummary, addQuickRow, removeQuickRow, applyQuickRow, applyAllQuickRows, clearQuickRows, previewQuickRow,
