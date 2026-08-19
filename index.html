@@ -322,6 +322,84 @@
                 <button @click="assignMode='class'"   class="btn" :class="assignMode=='class'  ?'btn-blue':'btn-gray'">🏫 班級視角</button>
                 <button @click="assignMode='teacher'" class="btn" :class="assignMode=='teacher'?'btn-blue':'btn-gray'">👨‍🏫 教師視角</button>
                 <button @click="assignMode='matrix'"  class="btn" :class="assignMode=='matrix' ?'btn-blue':'btn-gray'">📊 總量配課</button>
+                <button @click="assignMode='quick'"   class="btn" :class="assignMode=='quick'  ?'btn-blue':'btn-gray'">⚡ 快捷設定</button>
+            </div>
+
+            <!-- 快捷設定：像 Excel 一樣一列一列輸入 老師/科目/班級/節數，套用前自動檢查衝突 -->
+            <div v-if="assignMode === 'quick'" class="bg-white p-4 rounded shadow border-t-4 border-amber-500">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="text-sm text-gray-600">依序選好「老師」，輸入「科目」與「班級」（多班用「.」分隔，例如 <b>401.402</b>），節數留空就用該年級預設節數。套用前會自動檢查科目是否設定正確、班級是否已被其他老師配走。</div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs border-collapse">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="p-1 border">科任老師</th>
+                                <th class="p-1 border">科目1</th>
+                                <th class="p-1 border">班級</th>
+                                <th class="p-1 border w-14">節數</th>
+                                <th class="p-1 border">科目2</th>
+                                <th class="p-1 border">班級</th>
+                                <th class="p-1 border w-14">節數</th>
+                                <th class="p-1 border w-40">狀態</th>
+                                <th class="p-1 border w-24">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(row, idx) in quickRows" :key="idx" class="border-b align-top">
+                                <td class="p-1 bg-yellow-50">
+                                    <select v-model="row.teacherId" class="compact-select" style="max-width:100px">
+                                        <option :value="null">選老師</option>
+                                        <option v-for="t in teachers" :key="t.id" :value="t.id">{{ t.name }}</option>
+                                    </select>
+                                </td>
+                                <td class="p-1">
+                                    <select v-model="row.s1" class="compact-select" :class="getSubjectColor(row.s1)">
+                                        <option value="">-</option>
+                                        <option v-for="s in subjects" :key="s.zh" :value="s.zh">{{ s.zh }}</option>
+                                    </select>
+                                </td>
+                                <td class="p-1"><input v-model="row.c1" placeholder="例:401.402" class="compact-select" style="max-width:100px"></td>
+                                <td class="p-1"><input v-model="row.p1" type="number" placeholder="預設" class="compact-select" style="max-width:56px"></td>
+                                <td class="p-1">
+                                    <select v-model="row.s2" class="compact-select" :class="getSubjectColor(row.s2)">
+                                        <option value="">-</option>
+                                        <option v-for="s in subjects" :key="s.zh" :value="s.zh">{{ s.zh }}</option>
+                                    </select>
+                                </td>
+                                <td class="p-1"><input v-model="row.c2" placeholder="例:401.402" class="compact-select" style="max-width:100px"></td>
+                                <td class="p-1"><input v-model="row.p2" type="number" placeholder="預設" class="compact-select" style="max-width:56px"></td>
+                                <td class="p-1">
+                                    <div v-if="previewQuickRow(row).errors.length" class="text-red-600">
+                                        <div v-for="(err, ei) in previewQuickRow(row).errors" :key="ei" class="leading-tight mb-0.5">⚠ {{ err.subj }} {{ err.cid }}：{{ err.reason }}</div>
+                                    </div>
+                                    <div v-else-if="previewQuickRow(row).valid.length" class="text-green-600">✓ {{ previewQuickRow(row).valid.length }} 筆可套用</div>
+                                    <div v-else class="text-gray-300">尚未輸入</div>
+                                </td>
+                                <td class="p-1">
+                                    <button @click="applyQuickRow(idx)" class="btn btn-blue text-xs w-full mb-1"
+                                        :disabled="previewQuickRow(row).valid.length === 0"
+                                        :class="{'opacity-40 cursor-not-allowed': previewQuickRow(row).valid.length === 0}">✅ 套用</button>
+                                    <button @click="removeQuickRow(idx)" class="text-red-400 hover:text-red-600 text-xs w-full">🗑 刪除列</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex gap-2 mt-3">
+                    <button @click="addQuickRow" class="btn btn-gray text-xs">+ 新增一列</button>
+                    <button @click="applyAllQuickRows" class="btn btn-green text-xs">✅ 全部套用</button>
+                    <button @click="clearQuickRows" class="btn btn-gray text-xs">🧹 清空輸入列</button>
+                </div>
+                <div v-if="quickApplySummary" class="mt-4 p-3 rounded" :class="quickApplySummary.errors.length ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'">
+                    <div class="font-bold text-sm mb-1">
+                        本次共套用 {{ quickApplySummary.appliedCount }} 筆
+                        <span v-if="quickApplySummary.errors.length" class="text-red-600">，有 {{ quickApplySummary.errors.length }} 筆未套用，請回去檢查班級視角或教師視角：</span>
+                    </div>
+                    <div v-if="quickApplySummary.errors.length" class="text-xs text-red-700 space-y-0.5">
+                        <div v-for="(err, ei) in quickApplySummary.errors" :key="ei">⚠ {{ err.teacherName }}｜{{ err.subj }}｜{{ err.cid }}：{{ err.reason }}</div>
+                    </div>
+                </div>
             </div>
 
             <!-- 班級視角 -->
@@ -946,6 +1024,9 @@ createApp({
         const activeMatrixCell  = ref(null);
         const selectedClass     = ref('101');
         const selectedTeacherId = ref(null);
+        function newQuickRow() { return { teacherId: null, s1: '', c1: '', p1: '', s2: '', c2: '', p2: '', lastResult: null }; }
+        const quickRows = ref([newQuickRow()]);
+        const quickApplySummary = ref(null);
         const queryMode   = ref('class_single');
         const queryTarget = ref('101');
         const showModal   = ref(false);
@@ -1073,6 +1154,89 @@ createApp({
                         : getPeriodCount(grade, subj);
                     return { cid, name: cid, periods: p };
                 });
+        }
+
+        // ── 快捷設定（03.配課設定）─────────────────────────────
+        // 把「老師 + 科目 + 班級（可用 . , 空白 分隔多班）+ 節數(可留空用預設)」一列列輸入，
+        // 一次套用進 assignments。套用前會先檢查：科目是否存在於該年級課程、班級是否已被別人配走，
+        // 有問題的不會套用，並提示要去班級視角或教師視角確認。
+        function parseClassCodes(str) {
+            if (!str) return [];
+            return String(str).split(/[^0-9]+/).map(s => s.trim()).filter(Boolean);
+        }
+        function checkQuickSlot(teacherId, subj, classStr, periodStr) {
+            const result = { valid: [], errors: [] };
+            if (!subj && !classStr) return result; // 這個科目欄位整個沒填，略過
+            if (!teacherId) {
+                result.errors.push({ cid: classStr || '-', subj: subj || '-', reason: '尚未選擇老師' });
+                return result;
+            }
+            if (!subj) {
+                result.errors.push({ cid: classStr || '-', subj: '-', reason: '尚未選擇科目' });
+                return result;
+            }
+            const cids = parseClassCodes(classStr);
+            if (cids.length === 0) {
+                result.errors.push({ cid: classStr || '(空白)', subj, reason: '班級欄位無法辨識，請用「.」分隔，例如 401.402' });
+                return result;
+            }
+            cids.forEach(cid => {
+                const cls = classList.value.find(c => c.id === cid);
+                if (!cls) { result.errors.push({ cid, subj, reason: '找不到此班級，請確認班級代碼' }); return; }
+                const periodCount = getPeriodCount(cls.grade, subj);
+                if (periodCount === 0) {
+                    result.errors.push({ cid, subj, reason: `${cls.grade}年級課程未設定「${subj}」，科目設定錯誤，請回去檢查班級視角或教師視角` });
+                    return;
+                }
+                if (isTakenByOther(cid, subj, teacherId)) {
+                    const otherTid = getAssignment(cid, subj).primary;
+                    result.errors.push({ cid, subj, reason: `已由「${getTeacherName(otherTid)}」任教，不可重複配課，請回去檢查班級視角或教師視角` });
+                    return;
+                }
+                const period = (periodStr !== '' && periodStr !== null && periodStr !== undefined) ? parseInt(periodStr) : null;
+                result.valid.push({ cid, subj, teacherId, period });
+            });
+            return result;
+        }
+        function previewQuickRow(row) {
+            const r1 = checkQuickSlot(row.teacherId, row.s1, row.c1, row.p1);
+            const r2 = checkQuickSlot(row.teacherId, row.s2, row.c2, row.p2);
+            return { valid: [...r1.valid, ...r2.valid], errors: [...r1.errors, ...r2.errors] };
+        }
+        function applyValidQuickItems(validItems) {
+            validItems.forEach(item => {
+                setAssignment(item.cid, item.subj, 'primary', item.teacherId);
+                if (item.period !== null && !isNaN(item.period)) {
+                    assignments.value[item.cid][item.subj].override = item.period;
+                }
+            });
+        }
+        function addQuickRow() { quickRows.value.push(newQuickRow()); }
+        function removeQuickRow(idx) { quickRows.value.splice(idx, 1); }
+        function applyQuickRow(idx) {
+            const row = quickRows.value[idx];
+            const { valid, errors } = previewQuickRow(row);
+            applyValidQuickItems(valid);
+            row.lastResult = { appliedCount: valid.length, errors };
+            if (valid.length) saveData();
+        }
+        function applyAllQuickRows() {
+            let appliedCount = 0;
+            let allErrors = [];
+            quickRows.value.forEach(row => {
+                const { valid, errors } = previewQuickRow(row);
+                applyValidQuickItems(valid);
+                row.lastResult = { appliedCount: valid.length, errors };
+                appliedCount += valid.length;
+                if (errors.length) allErrors = allErrors.concat(errors.map(e => ({ ...e, teacherId: row.teacherId, teacherName: getTeacherName(row.teacherId) || '(未選老師)' })));
+            });
+            if (appliedCount) saveData();
+            quickApplySummary.value = { appliedCount, errors: allErrors };
+        }
+        function clearQuickRows() {
+            if (!confirm('確定要清空快捷設定的輸入列嗎？（不影響已經套用進去的配課）')) return;
+            quickRows.value = [newQuickRow()];
+            quickApplySummary.value = null;
         }
 
         function getTeacherTarget(tid) {
@@ -1822,6 +1986,7 @@ createApp({
             teachers, gradeConfig, scheduleData, specialRules, newRule,
             selectedClass, selectedTeacherId, queryMode, queryTarget,
             showModal, modalData, statsFilter, batchSubject, batchTeacherId,
+            quickRows, quickApplySummary, addQuickRow, removeQuickRow, applyQuickRow, applyAllQuickRows, clearQuickRows, previewQuickRow,
             teacherTargets, activeMatrixCell, todayStr,
             classList, specialistTeachers, printPages, filteredStatsTeachers,
             filteredTeacherRows, teacherRoleCounts, teacherFilterRole,
