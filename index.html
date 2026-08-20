@@ -635,6 +635,12 @@
         <div v-if="currentTab === 'priority'" class="max-w-[1000px] mx-auto no-print">
             <div class="bg-white p-6 rounded shadow border-l-4 border-indigo-500">
                 <h3 class="font-bold text-xl text-indigo-600 border-b pb-2 mb-4">⚡ 05. 科任權重</h3>
+                <div class="text-sm text-gray-600 bg-indigo-50 border border-indigo-200 rounded p-3 mb-4">
+                    💡 這裡設定的是「08.科任排課」自動排課時的<b>處理順序</b>。
+                    <b class="text-indigo-700">數字越小＝越優先排課</b>（例如設 1 的老師會比設 10 的老師先被排進課表，比較容易排到理想時段、比較不會卡到沒空堂可排）；
+                    數字越大＝越後面才處理，時段被排滿時比較容易被犧牲。<br>
+                    預設值是 <b>10</b>，如果某位老師的課很難排（例如要配合的班級或時段很少），可以把數字調小，讓自動排課優先幫他排。
+                </div>
                 <div class="grid grid-cols-3 gap-4">
                     <div v-for="t in specialistTeachers" :key="t.id" class="flex items-center gap-2 bg-gray-50 p-2 rounded border">
                         <span class="font-bold w-24">{{ t.name }}</span>
