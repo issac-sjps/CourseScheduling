@@ -582,6 +582,26 @@
         <div v-if="currentTab === 'special'" class="max-w-[1000px] mx-auto no-print">
             <div class="bg-white p-6 rounded shadow border-l-4 border-orange-500">
                 <h3 class="font-bold text-xl text-orange-600 border-b pb-2 mb-4">🛡️ 04. 特殊排課規則</h3>
+
+                <!-- 全校鎖定：整個時段所有班級（含科任）都不排課，用法跟 06.班級預排課的「⛔ 不排」一樣 -->
+                <div class="bg-red-50 border border-red-200 rounded p-3 mb-4">
+                    <div class="font-bold text-red-700 mb-2">🔒 全校時段鎖定（例如：週會、降旗、全校活動）</div>
+                    <div class="text-xs text-gray-600 mb-2">會把「所有班級」在這個時段直接鎖成 ⛔ 不排（跟班級預排課手動鎖一樣），已經排好課的格子會自動跳過不覆蓋。</div>
+                    <div class="flex gap-2 items-end flex-wrap">
+                        <div class="flex-1 min-w-[140px]"><label class="block font-bold text-xs mb-1">原因</label><input v-model="lockReason" class="w-full border p-1 rounded text-sm" placeholder="例：全校週會"></div>
+                        <div class="w-24"><label class="block font-bold text-xs mb-1">星期</label><select v-model="lockDay" class="w-full border p-1 rounded text-sm"><option v-for="d in days" :value="d">{{ d }}</option></select></div>
+                        <div>
+                            <label class="block font-bold text-xs mb-1">節次（可複選）</label>
+                            <div class="flex gap-1">
+                                <label v-for="p in periods" :key="p.idx" class="flex items-center gap-0.5 border rounded px-1.5 py-1 text-xs cursor-pointer"
+                                    :class="lockPeriods.includes(p.idx) ? 'bg-red-500 text-white border-red-500' : 'bg-white'">
+                                    <input type="checkbox" :value="p.idx" v-model="lockPeriods" class="hidden">{{ p.idx }}
+                                </label>
+                            </div>
+                        </div>
+                        <button @click="lockAllClassesForPeriods" class="btn btn-red">🔒 一鍵鎖定全校</button>
+                    </div>
+                </div>
                 <div class="flex gap-4 mb-4">
                     <button class="btn btn-orange" @click="addSpecialRule">新增規則</button>
                     <button class="btn btn-blue" @click="refreshSpecialStatus">刷新偵測</button>
@@ -1073,6 +1093,8 @@ createApp({
             { id:3, name:'自然連堂',        desc:'自然課需有一次連堂(3節中)',        status:'pending', logs:[] },
             { id:4, name:'主任週一排課',    desc:'學年主任班級週一第1節需為科任',    status:'pending', logs:[] },
             { id:5, name:'高年級科任下午',  desc:'5,6年級需有一天下午全科任',        status:'pending', logs:[] },
+            { id:6, name:'導師課每日上限',  desc:'每班每天「導師本人教的課」不超過4節',status:'pending', logs:[] },
+            { id:7, name:'導師課不連續3節', desc:'導師本人教的課不能連續排3節以上（上午/下午分開算，午休不算連續）', status:'pending', logs:[] },
         ]);
 
         // ── 2. PURE HELPERS ──────────────────────────────────────
@@ -1651,6 +1673,35 @@ createApp({
                         systemRules.value[3].status = 'fail'; systemRules.value[3].logs.push(`${cid} (主任班) 週一第1節是導師課`);
                     }
                 }
+                // Rule 6 & 7: 導師課每日不超過4節、不能連續3節以上（上午1-4節、下午5-7節分開算，中間隔午休不算連續）
+                const rule6 = systemRules.value.find(r => r.id === 6);
+                const rule7 = systemRules.value.find(r => r.id === 7);
+                if (htId) {
+                    for (const d of days) {
+                        let homeroomCount = 0;
+                        for (const p of periods) {
+                            const cell = scheduleData.value[cid]?.[d]?.[p.idx];
+                            if (cell && cell.teacherId == htId) homeroomCount++;
+                        }
+                        if (homeroomCount > 4) {
+                            rule6.status = 'fail';
+                            rule6.logs.push(`${cid} 週${d} 導師課共 ${homeroomCount} 節，超過4節上限`);
+                        }
+                        const countRun = (periodList) => {
+                            let cur = 0, maxRun = 0;
+                            periodList.forEach(p => {
+                                const cell = scheduleData.value[cid]?.[d]?.[p];
+                                if (cell && cell.teacherId == htId) { cur++; maxRun = Math.max(maxRun, cur); }
+                                else cur = 0;
+                            });
+                            return maxRun;
+                        };
+                        const morningRun   = countRun([1, 2, 3, 4]);
+                        const afternoonRun = countRun([5, 6, 7]);
+                        if (morningRun >= 3)   { rule7.status = 'fail'; rule7.logs.push(`${cid} 週${d} 上午導師課連續 ${morningRun} 節`); }
+                        if (afternoonRun >= 3) { rule7.status = 'fail'; rule7.logs.push(`${cid} 週${d} 下午導師課連續 ${afternoonRun} 節`); }
+                    }
+                }
             }
         }
 
@@ -1685,6 +1736,43 @@ createApp({
             let result = [];
             tokens.forEach(t => { result = result.concat(expandClassToken(t)); });
             return [...new Set(result)];
+        }
+        const lockDay     = ref('三');
+        const lockPeriods = ref([5, 6, 7]);
+        const lockReason  = ref('全校活動');
+        // 一鍵把「某天某幾節」的所有班級都鎖起來，效果跟你自己去 06.班級預排課 一格一格點「⛔ 不排」一樣，
+        // 已經有課的格子（不管是導師課還是科任課）不會被覆蓋，會跳過並列出來，避免誤刪已經排好的東西。
+        function lockAllClassesForPeriods() {
+            const day = lockDay.value;
+            const targetPeriods = lockPeriods.value;
+            if (!targetPeriods.length) return alert('請至少勾選一個節次');
+            if (!confirm(`確定要把「星期${day} 第${targetPeriods.join(',')}節」全校所有班級都鎖定不排課嗎？\n（已經排好課的格子會自動跳過，不會覆蓋）`)) return;
+            let lockedCount = 0;
+            const skipped = [];
+            classList.value.forEach(cls => {
+                const cid = cls.id;
+                if (!scheduleData.value[cid]) scheduleData.value[cid] = {};
+                targetPeriods.forEach(p => {
+                    if (!scheduleData.value[cid][day]) scheduleData.value[cid][day] = {};
+                    const existing = scheduleData.value[cid][day][p];
+                    if (existing && existing.type !== 'block') {
+                        skipped.push(`${cid} 第${p}節（已有：${existing.subject || ''}）`);
+                        return;
+                    }
+                    scheduleData.value[cid][day][p] = { type: 'block', subject: lockReason.value || '', teacherId: null };
+                    lockedCount++;
+                });
+            });
+            // 同步在 04 的規則清單裡也留一筆紀錄，方便之後查看/刪除
+            targetPeriods.forEach(p => {
+                specialRules.value.push({
+                    name: (lockReason.value || '全校鎖定') + '（全校鎖定）',
+                    classes: classList.value.map(c => c.id),
+                    day, period: p,
+                });
+            });
+            saveData();
+            alert(`✅ 已鎖定 ${lockedCount} 格。` + (skipped.length ? `\n\n⚠️ 以下 ${skipped.length} 格已經有課，已跳過：\n${skipped.join('\n')}` : ''));
         }
         function addSpecialRule() {
             if (!newRule.value.classes) return alert('請輸入班級');
@@ -2144,6 +2232,7 @@ createApp({
         return {
             currentTab, currentWorkspace, workspaces, tabs, workspaceTabs, selectWorkspace, assignMode, days, periods, subjects,
             teachers, gradeConfig, scheduleData, specialRules, newRule, parseClassRangeInput,
+            lockDay, lockPeriods, lockReason, lockAllClassesForPeriods,
             selectedClass, selectedTeacherId, queryMode, queryTarget,
             showModal, modalData, statsFilter, batchSubject, batchTeacherId,
             quickRows, quickApplySummary, addQuickRow, removeQuickRow, applyQuickRow, applyAllQuickRows, clearQuickRows, previewQuickRow,
