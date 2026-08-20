@@ -583,10 +583,10 @@
             <div class="bg-white p-6 rounded shadow border-l-4 border-orange-500">
                 <h3 class="font-bold text-xl text-orange-600 border-b pb-2 mb-4">🛡️ 04. 特殊排課規則</h3>
 
-                <!-- 全校鎖定：整個時段所有班級（含科任）都不排課，用法跟 06.班級預排課的「⛔ 不排」一樣 -->
+                <!-- 全校鎖定：整個時段所有老師（含導師、科任）都不排課，效果等同於幫每位老師點「⛔ 不排」 -->
                 <div class="bg-red-50 border border-red-200 rounded p-3 mb-4">
-                    <div class="font-bold text-red-700 mb-2">🔒 全校時段鎖定（例如：週會、降旗、全校活動）</div>
-                    <div class="text-xs text-gray-600 mb-2">會把「所有班級」在這個時段直接鎖成 ⛔ 不排（跟班級預排課手動鎖一樣），已經排好課的格子會自動跳過不覆蓋。</div>
+                    <div class="font-bold text-red-700 mb-2">🔒 全校時段鎖定（例如：國小週三下午本來就沒課、全校週會）</div>
+                    <div class="text-xs text-gray-600 mb-2">會直接寫進「每一位老師」的教師課表（07.科任預排課），把這個時段設成 ⛔ 不排，不用一個一個老師手動點。適合「這個時段本來就沒有課」這種全校固定行程。</div>
                     <div class="flex gap-2 items-end flex-wrap">
                         <div class="flex-1 min-w-[140px]"><label class="block font-bold text-xs mb-1">原因</label><input v-model="lockReason" class="w-full border p-1 rounded text-sm" placeholder="例：全校週會"></div>
                         <div class="w-24"><label class="block font-bold text-xs mb-1">星期</label><select v-model="lockDay" class="w-full border p-1 rounded text-sm"><option v-for="d in days" :value="d">{{ d }}</option></select></div>
@@ -723,7 +723,7 @@
                     <template v-for="p in periods">
                         <div class="editor-cell bg-gray-100 font-bold text-xs">{{ p.idx }}</div>
                         <div v-for="d in days" class="editor-cell border hover:bg-blue-50"
-                            :class="{'cell-blocked': isTeacherBlocked(d, p.idx)}"
+                            :class="{'cell-blocked': isTeacherBlocked(d, p.idx), 'cell-sys-blocked': isSystemBlocked(null, d, p.idx)}"
                             @click="handleTeacherCellClick(d, p.idx)">
                             <div v-if="getCellDisplay(d, p.idx, 'teacher')" class="w-full h-full flex flex-col justify-center items-center p-1">
                                 <span v-if="getCellDisplay(d, p.idx, 'teacher').type=='block'" class="text-red-500 font-bold text-2xl">✕</span>
@@ -777,7 +777,7 @@
                     <template v-for="p in periods">
                         <div class="editor-cell bg-gray-100 font-bold text-xs">{{ p.idx }}</div>
                         <div v-for="d in days" class="editor-cell border hover:bg-blue-50"
-                            :class="{'cell-blocked': isTeacherBlocked(d, p.idx)}"
+                            :class="{'cell-blocked': isTeacherBlocked(d, p.idx), 'cell-sys-blocked': isSystemBlocked(null, d, p.idx)}"
                             @click="handleTeacherCellClick(d, p.idx)">
                             <div v-if="getCellDisplay(d, p.idx, 'teacher')" class="w-full h-full flex flex-col justify-center items-center p-1">
                                 <span v-if="getCellDisplay(d, p.idx, 'teacher').type=='block'" class="text-red-500 font-bold text-2xl">✕</span>
@@ -1503,6 +1503,7 @@ createApp({
         }
 
         function handleTeacherCellClick(d, p) {
+            if (isSystemBlocked(null, d, p)) return; // 全校結構性沒有課的時段（例如週三下午），不給手動排課
             const t = teachers.value.find(x => x.id == selectedTeacherId.value);
             const isBlocked = t?.constraints?.includes(`${d}-${p}`) || false;
             let occupiedClassId = null, occupiedSubject = null;
@@ -1729,50 +1730,63 @@ createApp({
             for (let i = startNum; i <= endNum; i++) result.push(prefix + String(i).padStart(pad, '0'));
             return result;
         }
-        // 班級欄位可以用「.」「,」或空白分隔多筆，每一筆都可以是單一班級或上面的簡寫範圍
+        // 班級簡寫：支援兩種寫法
+        // 1) 範圍："501-8"（展開成501~508）、"501-508"（完整寫法）
+        // 2) 連續簡寫清單："501.3.5" → 沿用前一個完整代碼的前綴，展開成 501,503,505
         function parseClassRangeInput(str) {
             if (!str) return [];
-            const tokens = str.split(/[.,\s]+/).map(s => s.trim()).filter(Boolean);
+            const rawTokens = str.split(/[.,\s]+/).map(s => s.trim()).filter(Boolean);
             let result = [];
-            tokens.forEach(t => { result = result.concat(expandClassToken(t)); });
+            let lastFull = null; // 記住最近一個「完整」班級代碼，供後面的簡寫沿用前綴
+            rawTokens.forEach(tok => {
+                if (tok.includes('-')) {
+                    const expanded = expandClassToken(tok);
+                    result = result.concat(expanded);
+                    lastFull = expanded.length ? expanded[expanded.length - 1] : tok.split('-')[0];
+                    return;
+                }
+                if (!/^\d+$/.test(tok)) { result.push(tok); lastFull = null; return; } // 不是數字就原樣放入，不追蹤前綴
+                if (lastFull && tok.length < lastFull.length) {
+                    // 比前一個完整代碼短 → 沿用前綴，只換最後幾碼，例如 501 之後接 "3" → 503
+                    const code = lastFull.slice(0, lastFull.length - tok.length) + tok.padStart(tok.length, '0');
+                    result.push(code);
+                    lastFull = code;
+                } else {
+                    result.push(tok);
+                    lastFull = tok;
+                }
+            });
             return [...new Set(result)];
         }
         const lockDay     = ref('三');
         const lockPeriods = ref([5, 6, 7]);
-        const lockReason  = ref('全校活動');
-        // 一鍵把「某天某幾節」的所有班級都鎖起來，效果跟你自己去 06.班級預排課 一格一格點「⛔ 不排」一樣，
-        // 已經有課的格子（不管是導師課還是科任課）不會被覆蓋，會跳過並列出來，避免誤刪已經排好的東西。
+        const lockReason  = ref('國小無下午課');
+        // 一鍵把「某天某幾節」設成全校所有老師（含導師、科任）都不能排課，效果跟你自己去
+        // 07.科任預排課 一格一格點「⛔ 不排」完全一樣（寫進每位老師的 constraints），
+        // 這樣不管是自動排課還是手動在教師課表點課，都會被擋下來，符合「這個時段根本沒有課」的情況。
         function lockAllClassesForPeriods() {
             const day = lockDay.value;
             const targetPeriods = lockPeriods.value;
             if (!targetPeriods.length) return alert('請至少勾選一個節次');
-            if (!confirm(`確定要把「星期${day} 第${targetPeriods.join(',')}節」全校所有班級都鎖定不排課嗎？\n（已經排好課的格子會自動跳過，不會覆蓋）`)) return;
+            if (!confirm(`確定要把「星期${day} 第${targetPeriods.join(',')}節」設成全校所有老師都不排課嗎？\n（效果等同於幫每一位老師在教師課表點「⛔ 不排」）`)) return;
             let lockedCount = 0;
-            const skipped = [];
-            classList.value.forEach(cls => {
-                const cid = cls.id;
-                if (!scheduleData.value[cid]) scheduleData.value[cid] = {};
+            teachers.value.forEach(t => {
+                if (!t.constraints) t.constraints = [];
                 targetPeriods.forEach(p => {
-                    if (!scheduleData.value[cid][day]) scheduleData.value[cid][day] = {};
-                    const existing = scheduleData.value[cid][day][p];
-                    if (existing && existing.type !== 'block') {
-                        skipped.push(`${cid} 第${p}節（已有：${existing.subject || ''}）`);
-                        return;
-                    }
-                    scheduleData.value[cid][day][p] = { type: 'block', subject: lockReason.value || '', teacherId: null };
-                    lockedCount++;
+                    const key = `${day}-${p}`;
+                    if (!t.constraints.includes(key)) { t.constraints.push(key); lockedCount++; }
                 });
             });
-            // 同步在 04 的規則清單裡也留一筆紀錄，方便之後查看/刪除
+            // 同步在 04 的規則清單裡留一筆紀錄（純備註用，方便查看/刪除；實際擋課是靠上面寫進每位老師的 constraints）
             targetPeriods.forEach(p => {
                 specialRules.value.push({
-                    name: (lockReason.value || '全校鎖定') + '（全校鎖定）',
+                    name: (lockReason.value || '全校鎖定') + '（全校老師鎖定）',
                     classes: classList.value.map(c => c.id),
                     day, period: p,
                 });
             });
             saveData();
-            alert(`✅ 已鎖定 ${lockedCount} 格。` + (skipped.length ? `\n\n⚠️ 以下 ${skipped.length} 格已經有課，已跳過：\n${skipped.join('\n')}` : ''));
+            alert(`✅ 已鎖定完成，共寫入 ${lockedCount} 筆老師不排課設定。`);
         }
         function addSpecialRule() {
             if (!newRule.value.classes) return alert('請輸入班級');
