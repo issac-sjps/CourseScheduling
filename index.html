@@ -670,6 +670,14 @@
                         <option v-for="c in classList" :value="c.id">{{ c.name }}</option>
                     </select>
                 </div>
+                <div v-if="classSubjectMismatches.length" class="bg-red-50 border border-red-200 rounded p-2 text-xs">
+                    <div class="font-bold text-red-600 mb-1">⚠️ 這個班有科目「課表已排節數」跟「課程應有節數」對不上：</div>
+                    <div v-for="m in classSubjectMismatches" :key="m.subj" class="text-red-700">
+                        {{ m.subj }}：課表已排 <b>{{ m.placed }}</b> 節，應該要 <b>{{ m.target }}</b> 節
+                        <span v-if="m.placed > m.target">（多排了 {{ m.placed - m.target }} 節，請檢查是不是排錯或重複排了）</span>
+                        <span v-else>（還少 {{ m.target - m.placed }} 節還沒排）</span>
+                    </div>
+                </div>
             </div>
             <div class="bg-white p-4 rounded shadow overflow-x-auto">
                 <div class="editor-grid">
@@ -1199,6 +1207,33 @@ createApp({
         function getGradeActiveSubjects(g) {
             return subjects.value.filter(s => getPeriodCount(g, s.zh) > 0);
         }
+        // 這個班某科目，目前實際排進課表裡有幾節（不分是導師還是科任教的，只算格子數）
+        function getClassSubjectPlacedCount(cid, subj) {
+            let count = 0;
+            const clsData = scheduleData.value[cid];
+            if (clsData) {
+                for (const d in clsData) {
+                    for (const p in clsData[d]) {
+                        if (clsData[d][p]?.subject === subj) count++;
+                    }
+                }
+            }
+            return count;
+        }
+        // 這個班「課表已排節數」跟「課程應該要有的節數」對不上的科目清單（不管是多排還是少排）
+        const classSubjectMismatches = computed(() => {
+            const cid = selectedClass.value;
+            if (!cid) return [];
+            const grade = parseInt(cid.charAt(0));
+            const result = [];
+            getGradeActiveSubjects(grade).forEach(s => {
+                const target = getPeriodCount(grade, s.zh);
+                if (target <= 0) return;
+                const placed = getClassSubjectPlacedCount(cid, s.zh);
+                if (placed !== target) result.push({ subj: s.zh, placed, target });
+            });
+            return result;
+        });
         function getEffectivePeriod(cid, subj) {
             const assign = getAssignment(cid, subj);
             const grade  = parseInt(cid.charAt(0));
@@ -2252,7 +2287,7 @@ createApp({
         return {
             currentTab, currentWorkspace, workspaces, tabs, workspaceTabs, selectWorkspace, assignMode, days, periods, subjects,
             teachers, gradeConfig, scheduleData, specialRules, newRule, parseClassRangeInput,
-            editingRuleIndex, startEditRule, cancelEditRule,
+            editingRuleIndex, startEditRule, cancelEditRule, classSubjectMismatches,
             selectedClass, selectedTeacherId, queryMode, queryTarget,
             showModal, modalData, statsFilter, batchSubject, batchTeacherId,
             quickRows, quickApplySummary, addQuickRow, removeQuickRow, applyQuickRow, applyAllQuickRows, clearQuickRows, previewQuickRow,
