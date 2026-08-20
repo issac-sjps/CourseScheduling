@@ -1587,6 +1587,11 @@ createApp({
             if (isSpecialBlocked(cid, day, period)) return false;
             if (isSystemBlocked(cid, day, period)) return false;
             if (subj === '體育' && (period === 4 || period === 5)) return false;
+            // 同一班同一天不能有第二節體育課
+            if (subj === '體育') {
+                const dayData = scheduleData.value[cid]?.[day];
+                if (dayData && Object.values(dayData).some(cell => cell?.subject === '體育')) return false;
+            }
             for (const other in scheduleData.value) {
                 if (scheduleData.value[other]?.[day]?.[period]?.teacherId == tid) return false;
             }
