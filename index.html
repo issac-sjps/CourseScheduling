@@ -670,12 +670,11 @@
                         <option v-for="c in classList" :value="c.id">{{ c.name }}</option>
                     </select>
                 </div>
-                <div v-if="classSubjectMismatches.length" class="bg-red-50 border border-red-200 rounded p-2 text-xs">
-                    <div class="font-bold text-red-600 mb-1">⚠️ 這個班有科目「課表已排節數」跟「課程應有節數」對不上：</div>
-                    <div v-for="m in classSubjectMismatches" :key="m.subj" class="text-red-700">
-                        {{ m.subj }}：課表已排 <b>{{ m.placed }}</b> 節，應該要 <b>{{ m.target }}</b> 節
-                        <span v-if="m.placed > m.target">（多排了 {{ m.placed - m.target }} 節，請檢查是不是排錯或重複排了）</span>
-                        <span v-else>（還少 {{ m.target - m.placed }} 節還沒排）</span>
+                <div class="bg-gray-50 border rounded p-2 text-xs flex flex-wrap gap-x-4 gap-y-1">
+                    <div v-for="m in classSubjectStatus" :key="m.subj"
+                        :class="{'text-gray-500': m.status === 'none', 'text-green-600 font-bold': m.status === 'ok', 'text-red-600 font-bold': m.status === 'over'}">
+                        {{ m.status === 'ok' ? '✔' : (m.status === 'over' ? '⚠' : '·') }}
+                        {{ m.subj }} {{ m.placed }}/{{ m.target }}
                     </div>
                 </div>
             </div>
@@ -1112,6 +1111,7 @@ createApp({
             { id:5, name:'高年級科任下午',  desc:'5,6年級需有一天下午全科任',        status:'pending', logs:[] },
             { id:6, name:'導師課每日上限',  desc:'每班每天「導師本人教的課」不超過4節',status:'pending', logs:[] },
             { id:7, name:'導師課不連續3節', desc:'導師本人教的課不能連續排3節以上（上午/下午分開算，午休不算連續）', status:'pending', logs:[] },
+            { id:8, name:'課表節數缺漏',    desc:'找出每班每科目「應排節數」還沒排完的（不含排超過，排超過在班級預排課會即時提醒）', status:'pending', logs:[] },
         ]);
 
         // ── 2. PURE HELPERS ──────────────────────────────────────
@@ -1220,19 +1220,19 @@ createApp({
             }
             return count;
         }
-        // 這個班「課表已排節數」跟「課程應該要有的節數」對不上的科目清單（不管是多排還是少排）
-        const classSubjectMismatches = computed(() => {
+        // 這個班每個科目的排課狀態：黑=還沒排完(含完全沒排)、綠=剛好排完、紅=排超過
+        const classSubjectStatus = computed(() => {
             const cid = selectedClass.value;
             if (!cid) return [];
             const grade = parseInt(cid.charAt(0));
-            const result = [];
-            getGradeActiveSubjects(grade).forEach(s => {
+            return getGradeActiveSubjects(grade).map(s => {
                 const target = getPeriodCount(grade, s.zh);
-                if (target <= 0) return;
                 const placed = getClassSubjectPlacedCount(cid, s.zh);
-                if (placed !== target) result.push({ subj: s.zh, placed, target });
+                let status = 'none';
+                if (placed > target) status = 'over';
+                else if (placed === target) status = 'ok';
+                return { subj: s.zh, placed, target, status };
             });
-            return result;
         });
         function getEffectivePeriod(cid, subj) {
             const assign = getAssignment(cid, subj);
@@ -1753,6 +1753,21 @@ createApp({
                     }
                 }
             }
+            // Rule 8: 找出每班每科目「應排節數」還沒排完的（不管排課排到哪個班，都用 classList 掃過一輪，
+            // 就算某個班完全還沒開始排課、scheduleData 裡連紀錄都沒有，也照樣抓得到）
+            const rule8 = systemRules.value.find(r => r.id === 8);
+            classList.value.forEach(cls => {
+                const grade = parseInt(cls.id.charAt(0));
+                getGradeActiveSubjects(grade).forEach(s => {
+                    const target = getPeriodCount(grade, s.zh);
+                    if (target <= 0) return;
+                    const placed = getClassSubjectPlacedCount(cls.id, s.zh);
+                    if (placed < target) {
+                        rule8.status = 'fail';
+                        rule8.logs.push(`${cls.id} ${s.zh}：課表已排 ${placed}/${target} 節，還少 ${target - placed} 節`);
+                    }
+                });
+            });
         }
 
         // ── 10. SPECIAL RULES ────────────────────────────────────
@@ -2287,7 +2302,7 @@ createApp({
         return {
             currentTab, currentWorkspace, workspaces, tabs, workspaceTabs, selectWorkspace, assignMode, days, periods, subjects,
             teachers, gradeConfig, scheduleData, specialRules, newRule, parseClassRangeInput,
-            editingRuleIndex, startEditRule, cancelEditRule, classSubjectMismatches,
+            editingRuleIndex, startEditRule, cancelEditRule, classSubjectStatus,
             selectedClass, selectedTeacherId, queryMode, queryTarget,
             showModal, modalData, statsFilter, batchSubject, batchTeacherId,
             quickRows, quickApplySummary, addQuickRow, removeQuickRow, applyQuickRow, applyAllQuickRows, clearQuickRows, previewQuickRow,
