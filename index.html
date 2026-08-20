@@ -582,28 +582,17 @@
         <div v-if="currentTab === 'special'" class="max-w-[1000px] mx-auto no-print">
             <div class="bg-white p-6 rounded shadow border-l-4 border-orange-500">
                 <h3 class="font-bold text-xl text-orange-600 border-b pb-2 mb-4">🛡️ 04. 特殊排課規則</h3>
-
-                <!-- 全校鎖定：整個時段所有老師（含導師、科任）都不排課，效果等同於幫每位老師點「⛔ 不排」 -->
-                <div class="bg-red-50 border border-red-200 rounded p-3 mb-4">
-                    <div class="font-bold text-red-700 mb-2">🔒 全校時段鎖定（例如：國小週三下午本來就沒課、全校週會）</div>
-                    <div class="text-xs text-gray-600 mb-2">會直接寫進「每一位老師」的教師課表（07.科任預排課），把這個時段設成 ⛔ 不排，不用一個一個老師手動點。適合「這個時段本來就沒有課」這種全校固定行程。</div>
-                    <div class="flex gap-2 items-end flex-wrap">
-                        <div class="flex-1 min-w-[140px]"><label class="block font-bold text-xs mb-1">原因</label><input v-model="lockReason" class="w-full border p-1 rounded text-sm" placeholder="例：全校週會"></div>
-                        <div class="w-24"><label class="block font-bold text-xs mb-1">星期</label><select v-model="lockDay" class="w-full border p-1 rounded text-sm"><option v-for="d in days" :value="d">{{ d }}</option></select></div>
-                        <div>
-                            <label class="block font-bold text-xs mb-1">節次（可複選）</label>
-                            <div class="flex gap-1">
-                                <label v-for="p in periods" :key="p.idx" class="flex items-center gap-0.5 border rounded px-1.5 py-1 text-xs cursor-pointer"
-                                    :class="lockPeriods.includes(p.idx) ? 'bg-red-500 text-white border-red-500' : 'bg-white'">
-                                    <input type="checkbox" :value="p.idx" v-model="lockPeriods" class="hidden">{{ p.idx }}
-                                </label>
-                            </div>
-                        </div>
-                        <button @click="lockAllClassesForPeriods" class="btn btn-red">🔒 一鍵鎖定全校</button>
-                    </div>
+                <div class="text-sm text-gray-600 bg-gray-50 border rounded p-3 mb-4">
+                    💡 這裡設定的規則，目的是<b>避免自動排課把科任課排進這個班級的這個時段</b>（例如整班被抽走去合班上客語課、外堂活動等）。
+                    只會擋「08.科任排課」自動排課，不會擋你自己手動排課，也不會讓格子自動出現任何科目文字。
                 </div>
-                <div class="flex gap-4 mb-4">
-                    <button class="btn btn-orange" @click="addSpecialRule">新增規則</button>
+                <div class="flex gap-4 mb-4 items-center">
+                    <button v-if="editingRuleIndex === null" class="btn btn-orange" @click="addSpecialRule">新增規則</button>
+                    <template v-else>
+                        <button class="btn btn-orange" @click="addSpecialRule">💾 儲存修改</button>
+                        <button class="btn btn-gray" @click="cancelEditRule">取消編輯</button>
+                        <span class="text-xs text-orange-600 font-bold">✏️ 編輯模式中，修改完按「儲存修改」</span>
+                    </template>
                     <button class="btn btn-blue" @click="refreshSpecialStatus">刷新偵測</button>
                 </div>
                 <div class="flex gap-2 mb-4 items-end bg-orange-50 p-3 rounded flex-wrap">
@@ -611,11 +600,12 @@
                     <div class="flex-1 min-w-[220px]"><label class="block font-bold text-xs mb-1">班級（用「.」「,」或空白分隔，可用簡寫如 501-8）</label><input v-model="newRule.classes" class="w-full border p-1 rounded text-sm" placeholder="例：501-8.601-8"></div>
                     <div class="w-24"><label class="block font-bold text-xs mb-1">星期</label><select v-model="newRule.day" class="w-full border p-1 rounded text-sm"><option v-for="d in days" :value="d">{{ d }}</option></select></div>
                     <div>
-                        <label class="block font-bold text-xs mb-1">節次（可複選）</label>
+                        <label class="block font-bold text-xs mb-1">節次（{{ editingRuleIndex === null ? '可複選' : '編輯模式僅能單選' }}）</label>
                         <div class="flex gap-1">
                             <label v-for="p in periods" :key="p.idx" class="flex items-center gap-0.5 border rounded px-1.5 py-1 text-xs cursor-pointer"
-                                :class="newRule.periods.includes(p.idx) ? 'bg-orange-500 text-white border-orange-500' : 'bg-white'">
-                                <input type="checkbox" :value="p.idx" v-model="newRule.periods" class="hidden">{{ p.idx }}
+                                :class="newRule.periods.includes(p.idx) ? 'bg-orange-500 text-white border-orange-500' : 'bg-white'"
+                                @click.prevent="editingRuleIndex !== null ? (newRule.periods = [p.idx]) : (newRule.periods.includes(p.idx) ? newRule.periods.splice(newRule.periods.indexOf(p.idx),1) : newRule.periods.push(p.idx))">
+                                {{ p.idx }}
                             </label>
                         </div>
                     </div>
@@ -624,12 +614,16 @@
                     展開後共 {{ parseClassRangeInput(newRule.classes).length }} 班：{{ parseClassRangeInput(newRule.classes).join('、') }}
                 </div>
                 <div class="space-y-2">
-                    <div v-for="(rule, idx) in specialRules" :key="idx" class="bg-white border rounded p-3 flex justify-between items-center shadow-sm">
+                    <div v-for="(rule, idx) in specialRules" :key="idx" class="bg-white border rounded p-3 flex justify-between items-center shadow-sm"
+                        :class="{'ring-2 ring-orange-400': editingRuleIndex === idx}">
                         <div>
                             <div class="font-bold text-gray-800">{{ rule.name }} <span class="text-xs bg-gray-200 px-2 rounded">{{ rule.day }}{{ rule.period }}</span></div>
                             <div class="text-xs text-gray-500">{{ rule.classes.join(', ') }}</div>
                         </div>
-                        <button @click="specialRules.splice(idx,1); saveData()" class="btn btn-red text-xs">刪除</button>
+                        <div class="flex gap-2">
+                            <button @click="startEditRule(idx)" class="btn btn-gray text-xs">✏️ 編輯</button>
+                            <button @click="specialRules.splice(idx,1); saveData()" class="btn btn-red text-xs">刪除</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1758,53 +1752,45 @@ createApp({
             });
             return [...new Set(result)];
         }
-        const lockDay     = ref('三');
-        const lockPeriods = ref([5, 6, 7]);
-        const lockReason  = ref('國小無下午課');
-        // 一鍵把「某天某幾節」設成全校所有老師（含導師、科任）都不能排課，效果跟你自己去
-        // 07.科任預排課 一格一格點「⛔ 不排」完全一樣（寫進每位老師的 constraints），
-        // 這樣不管是自動排課還是手動在教師課表點課，都會被擋下來，符合「這個時段根本沒有課」的情況。
-        function lockAllClassesForPeriods() {
-            const day = lockDay.value;
-            const targetPeriods = lockPeriods.value;
-            if (!targetPeriods.length) return alert('請至少勾選一個節次');
-            if (!confirm(`確定要把「星期${day} 第${targetPeriods.join(',')}節」設成全校所有老師都不排課嗎？\n（效果等同於幫每一位老師在教師課表點「⛔ 不排」）`)) return;
-            let lockedCount = 0;
-            teachers.value.forEach(t => {
-                if (!t.constraints) t.constraints = [];
-                targetPeriods.forEach(p => {
-                    const key = `${day}-${p}`;
-                    if (!t.constraints.includes(key)) { t.constraints.push(key); lockedCount++; }
-                });
-            });
-            // 同步在 04 的規則清單裡留一筆紀錄（純備註用，方便查看/刪除；實際擋課是靠上面寫進每位老師的 constraints）
-            targetPeriods.forEach(p => {
-                specialRules.value.push({
-                    name: (lockReason.value || '全校鎖定') + '（全校老師鎖定）',
-                    classes: classList.value.map(c => c.id),
-                    day, period: p,
-                });
-            });
-            saveData();
-            alert(`✅ 已鎖定完成，共寫入 ${lockedCount} 筆老師不排課設定。`);
-        }
+        const editingRuleIndex = ref(null);
         function addSpecialRule() {
             if (!newRule.value.classes) return alert('請輸入班級');
             if (!newRule.value.periods.length) return alert('請至少勾選一個節次');
             const classes = parseClassRangeInput(newRule.value.classes);
             const unknown = classes.filter(cid => !classList.value.find(c => c.id === cid));
             if (unknown.length && !confirm(`⚠️ 這些班級代碼系統裡找不到，仍要新增嗎？\n${unknown.join(', ')}`)) return;
-            // 有勾選幾個節次，就新增幾筆規則（同一個原因/班級/星期，節次分開存）
-            newRule.value.periods.forEach(p => {
-                specialRules.value.push({
+            if (editingRuleIndex.value !== null) {
+                // 編輯模式：直接覆蓋這一筆規則（只用勾選的第一個節次，一筆規則對應一個節次）
+                specialRules.value[editingRuleIndex.value] = {
                     name: newRule.value.name || '特殊',
                     classes,
                     day: newRule.value.day,
-                    period: p,
+                    period: newRule.value.periods[0],
+                };
+                editingRuleIndex.value = null;
+                newRule.value = { name: '', classes: '', day: '二', periods: [] };
+            } else {
+                // 有勾選幾個節次，就新增幾筆規則（同一個原因/班級/星期，節次分開存）
+                newRule.value.periods.forEach(p => {
+                    specialRules.value.push({
+                        name: newRule.value.name || '特殊',
+                        classes,
+                        day: newRule.value.day,
+                        period: p,
+                    });
                 });
-            });
-            newRule.value = { name: newRule.value.name, classes: newRule.value.classes, day: newRule.value.day, periods: [] };
+                newRule.value = { name: newRule.value.name, classes: newRule.value.classes, day: newRule.value.day, periods: [] };
+            }
             saveData();
+        }
+        function startEditRule(idx) {
+            const rule = specialRules.value[idx];
+            newRule.value = { name: rule.name, classes: rule.classes.join('.'), day: rule.day, periods: [rule.period] };
+            editingRuleIndex.value = idx;
+        }
+        function cancelEditRule() {
+            editingRuleIndex.value = null;
+            newRule.value = { name: '', classes: '', day: '二', periods: [] };
         }
         function refreshSpecialStatus() { alert('偵測已刷新'); }
 
@@ -2246,7 +2232,7 @@ createApp({
         return {
             currentTab, currentWorkspace, workspaces, tabs, workspaceTabs, selectWorkspace, assignMode, days, periods, subjects,
             teachers, gradeConfig, scheduleData, specialRules, newRule, parseClassRangeInput,
-            lockDay, lockPeriods, lockReason, lockAllClassesForPeriods,
+            editingRuleIndex, startEditRule, cancelEditRule,
             selectedClass, selectedTeacherId, queryMode, queryTarget,
             showModal, modalData, statsFilter, batchSubject, batchTeacherId,
             quickRows, quickApplySummary, addQuickRow, removeQuickRow, applyQuickRow, applyAllQuickRows, clearQuickRows, previewQuickRow,
