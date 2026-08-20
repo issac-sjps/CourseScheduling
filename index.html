@@ -596,9 +596,18 @@
                     <button class="btn btn-blue" @click="refreshSpecialStatus">刷新偵測</button>
                 </div>
                 <div class="flex gap-2 mb-4 items-end bg-orange-50 p-3 rounded flex-wrap">
-                    <div class="flex-1 min-w-[120px]"><label class="block font-bold text-xs mb-1">原因</label><input v-model="newRule.name" class="w-full border p-1 rounded text-sm" placeholder="例：客語課、綜合課"></div>
+                    <div class="flex-1 min-w-[90px]"><label class="block font-bold text-xs mb-1">原因</label><input v-model="newRule.name" class="w-full border p-1 rounded text-sm" placeholder="例：客語課"></div>
                     <div class="flex-1 min-w-[220px]"><label class="block font-bold text-xs mb-1">班級（用「.」「,」或空白分隔，可用簡寫如 501-8）</label><input v-model="newRule.classes" class="w-full border p-1 rounded text-sm" placeholder="例：501-8.601-8"></div>
-                    <div class="w-24"><label class="block font-bold text-xs mb-1">星期</label><select v-model="newRule.day" class="w-full border p-1 rounded text-sm"><option v-for="d in days" :value="d">{{ d }}</option></select></div>
+                    <div>
+                        <label class="block font-bold text-xs mb-1">星期</label>
+                        <div class="flex gap-1">
+                            <label v-for="d in days" :key="d" class="flex items-center justify-center border rounded px-2 py-1 text-xs cursor-pointer w-7"
+                                :class="newRule.day === d ? 'bg-orange-500 text-white border-orange-500' : 'bg-white'"
+                                @click="newRule.day = d">
+                                {{ d }}
+                            </label>
+                        </div>
+                    </div>
                     <div>
                         <label class="block font-bold text-xs mb-1">節次（{{ editingRuleIndex === null ? '可複選' : '編輯模式僅能單選' }}）</label>
                         <div class="flex gap-1">
