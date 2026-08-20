@@ -974,8 +974,9 @@
                 <div class="border-t pt-2 mt-2">
                     <label class="block text-xs font-bold mb-2">排入課程 (顯示剩餘節數)</label>
                     <select v-model="modalData.selectedTask" class="w-full border p-2 mb-2 rounded font-bold" size="5">
-                        <option v-for="task in modalData.availableTasks" :value="task" class="py-1">
-                            {{ task.name }} {{ task.subj }} (剩 {{ task.remaining }} 節)
+                        <option v-for="task in modalData.availableTasks" :value="task" class="py-1"
+                            :disabled="isTaskSlotConflict(task, modalData.d, modalData.p, modalData.teacherId)">
+                            {{ task.name }} {{ task.subj }} (剩 {{ task.remaining }} 節){{ isTaskSlotConflict(task, modalData.d, modalData.p, modalData.teacherId) ? ' ⚠衝堂' : '' }}
                         </option>
                     </select>
                     <div class="flex gap-2">
@@ -1579,10 +1580,24 @@ createApp({
             saveData();
         }
 
+        // 這個任務（某班+某科目）在「這個老師這一格」是否會撞到別人已經排好的課（衝堂）
+        function isTaskSlotConflict(task, d, p, teacherId) {
+            const existing = scheduleData.value[task.cid]?.[d]?.[p];
+            return !!existing && existing.teacherId != teacherId;
+        }
         function saveTeacherScheduleCell(action) {
             const { d, p, teacherId, selectedTask, occupiedClassId } = modalData.value;
             const t = teachers.value.find(x => x.id == teacherId);
             const k = `${d}-${p}`;
+
+            // 排課前先檢查：這個班這一格是不是已經被別人（不同老師）佔用了（例如已經在 06.班級預排課排過導師課）
+            if (action === 'course' && selectedTask) {
+                const existing = scheduleData.value[selectedTask.cid]?.[d]?.[p];
+                if (existing && existing.teacherId != teacherId) {
+                    alert(`⚠️ 無法排入：${selectedTask.cid} 星期${d}第${p}節 已經有課了（${existing.subject || ''}${existing.teacherId ? '，' + getTeacherName(existing.teacherId) : ''}），這是衝堂。\n請先去「06.班級預排課」把那一格清掉或調整，才能在這裡排入。`);
+                    return;
+                }
+            }
 
             // Remove old block constraint
             if (t.constraints?.includes(k)) {
@@ -2302,7 +2317,7 @@ createApp({
         return {
             currentTab, currentWorkspace, workspaces, tabs, workspaceTabs, selectWorkspace, assignMode, days, periods, subjects,
             teachers, gradeConfig, scheduleData, specialRules, newRule, parseClassRangeInput,
-            editingRuleIndex, startEditRule, cancelEditRule, classSubjectStatus,
+            editingRuleIndex, startEditRule, cancelEditRule, classSubjectStatus, isTaskSlotConflict,
             selectedClass, selectedTeacherId, queryMode, queryTarget,
             showModal, modalData, statsFilter, batchSubject, batchTeacherId,
             quickRows, quickApplySummary, addQuickRow, removeQuickRow, applyQuickRow, applyAllQuickRows, clearQuickRows, previewQuickRow,
