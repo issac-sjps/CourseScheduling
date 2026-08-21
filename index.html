@@ -1130,8 +1130,9 @@ createApp({
             { id:7, name:'導師課不連續3節', desc:'導師本人教的課不能連續排3節以上（上午/下午分開算，午休不算連續）', status:'pending', logs:[] },
             { id:8, name:'課表節數缺漏',    desc:'找出每班每科目「應排節數」還沒排完的（不含排超過，排超過在班級預排課會即時提醒）', status:'pending', logs:[] },
             { id:9, name:'英語/世界之窗同天', desc:'同一班「英語」跟「世界之窗」（同一位老師教）不應排在同一天', status:'pending', logs:[] },
-            { id:10, name:'科任堂數每日上限', desc:'半天(4節)的班級每天最多2節科任課、全天(7節)最多4節科任課', status:'pending', logs:[] },
+            { id:10, name:'科任堂數每日上限', desc:'半天(4節)最多2節科任課、全天最多4節科任課（一、二年級全天降為3節）', status:'pending', logs:[] },
             { id:11, name:'社會課不連堂',    desc:'同一天同一班不應有兩節社會',      status:'pending', logs:[] },
+            { id:12, name:'低年級避開第4節', desc:'一、二年級科任課不排在第4節',      status:'pending', logs:[] },
         ]);
 
         // ── 2. PURE HELPERS ──────────────────────────────────────
@@ -1292,6 +1293,11 @@ createApp({
                 const hasEng   = cells.some(c => c?.subject === '英語');
                 const hasWorld = cells.some(c => c?.subject === '世界之窗');
                 if (hasEng && hasWorld) issues.push(`週${d} 「英語」跟「世界之窗」都排在同一天（同一位老師教），建議分開`);
+                if (parseInt(cid.charAt(0)) <= 2) {
+                    const htId = getHomeroomTeacherId(cid);
+                    const cell4 = dayData[4];
+                    if (cell4 && cell4.teacherId && cell4.teacherId != htId) issues.push(`週${d}第4節 排了科任課（${cell4.subject}），一、二年級科任課不排第4節`);
+                }
             });
             const natureIssue = checkNatureRule(cid);
             if (natureIssue) issues.push(natureIssue);
@@ -1739,11 +1745,13 @@ createApp({
         function getDayPeriodCapacity(cid, day) {
             return periods.filter(p => !isSystemBlocked(cid, day, p.idx)).length;
         }
-        // 半天(4節)最多2節科任、全天(7節)最多4節科任
+        // 半天(4節)最多2節科任、全天(7節)最多4節科任；一、二年級的全天(通常只有星期二)特別降為最多3節
         function getSpecialistCapForDay(cid, day) {
             const cap = getDayPeriodCapacity(cid, day);
             if (cap <= 0) return 0;
-            return cap <= 4 ? 2 : 4;
+            if (cap <= 4) return 2; // 半天
+            const grade = parseInt(cid.charAt(0));
+            return grade <= 2 ? 3 : 4; // 全天：低年級3節、其他4節
         }
         // 這個班這一天目前已經排了幾節「科任課」（教的人不是導師本人）
         function getSpecialistPeriodCountForDay(cid, day) {
@@ -1758,6 +1766,11 @@ createApp({
             if (t?.constraints?.includes(`${day}-${period}`)) return false;
             if (isSpecialBlocked(cid, day, period)) return false;
             if (isSystemBlocked(cid, day, period)) return false;
+            // 一、二年級科任課不排第4節（不管哪一天）
+            if (parseInt(cid.charAt(0)) <= 2 && period === 4) {
+                const htId = getHomeroomTeacherId(cid);
+                if (tid != htId) return false;
+            }
             if (subj === '體育' && (period === 4 || period === 5)) return false;
             if (subj === '體育') {
                 const dayData = scheduleData.value[cid]?.[day];
@@ -1951,6 +1964,17 @@ createApp({
                 // Rule 4: Grade directors need specialist at Mon period 1
                 const htId = getHomeroomTeacherId(cid);
                 const ht = teachers.value.find(t => t.id == htId);
+                // Rule 12: 一、二年級科任課不排第4節
+                if (parseInt(cid.charAt(0)) <= 2) {
+                    const rule12 = systemRules.value.find(r => r.id === 12);
+                    for (const d of days) {
+                        const cell = scheduleData.value[cid][d]?.[4];
+                        if (cell && cell.teacherId && cell.teacherId != htId) {
+                            rule12.status = 'fail';
+                            rule12.logs.push(`${cid} 週${d}第4節 排了科任課（${cell.subject}）`);
+                        }
+                    }
+                }
                 if (ht?.isGradeDirector) {
                     const cell = scheduleData.value[cid]['一']?.[1];
                     if (!cell || cell.teacherId == htId) {
