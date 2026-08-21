@@ -1131,6 +1131,7 @@ createApp({
             { id:8, name:'課表節數缺漏',    desc:'找出每班每科目「應排節數」還沒排完的（不含排超過，排超過在班級預排課會即時提醒）', status:'pending', logs:[] },
             { id:9, name:'英語/世界之窗同天', desc:'同一班「英語」跟「世界之窗」（同一位老師教）不應排在同一天', status:'pending', logs:[] },
             { id:10, name:'科任堂數每日上限', desc:'半天(4節)的班級每天最多2節科任課、全天(7節)最多4節科任課', status:'pending', logs:[] },
+            { id:11, name:'社會課不連堂',    desc:'同一天同一班不應有兩節社會',      status:'pending', logs:[] },
         ]);
 
         // ── 2. PURE HELPERS ──────────────────────────────────────
@@ -1286,6 +1287,8 @@ createApp({
                 const cells = Object.values(dayData);
                 const peCount = cells.filter(c => c?.subject === '體育').length;
                 if (peCount > 1) issues.push(`週${d} 排了 ${peCount} 節體育課，同一天不能超過1節`);
+                const soCount = cells.filter(c => c?.subject === '社會').length;
+                if (soCount > 1) issues.push(`週${d} 排了 ${soCount} 節社會課，同一天不能超過1節`);
                 const hasEng   = cells.some(c => c?.subject === '英語');
                 const hasWorld = cells.some(c => c?.subject === '世界之窗');
                 if (hasEng && hasWorld) issues.push(`週${d} 「英語」跟「世界之窗」都排在同一天（同一位老師教），建議分開`);
@@ -1760,6 +1763,11 @@ createApp({
                 const dayData = scheduleData.value[cid]?.[day];
                 if (dayData && Object.values(dayData).some(cell => cell?.subject === '體育')) return false;
             }
+            // 同一班同一天不能有第二節社會課
+            if (subj === '社會') {
+                const dayData = scheduleData.value[cid]?.[day];
+                if (dayData && Object.values(dayData).some(cell => cell?.subject === '社會')) return false;
+            }
             if (subj === '英語' || subj === '世界之窗') {
                 const dayData = scheduleData.value[cid]?.[day];
                 if (dayData && Object.values(dayData).some(cell => cell?.subject === '英語' || cell?.subject === '世界之窗')) return false;
@@ -1930,6 +1938,15 @@ createApp({
                         rule10.status = 'fail';
                         rule10.logs.push(`${cid} 週${d}（${cap === 2 ? '半天' : '全天'}）排了 ${actual} 節科任課，超過上限 ${cap} 節`);
                     }
+                }
+                // Rule 11: 社會課不連堂
+                const rule11 = systemRules.value.find(r => r.id === 11);
+                for (const d of days) {
+                    let soCount = 0;
+                    for (const p of periods) {
+                        if (scheduleData.value[cid][d]?.[p.idx]?.subject === '社會') soCount++;
+                    }
+                    if (soCount > 1) { rule11.status = 'fail'; rule11.logs.push(`${cid} 週${d} 有 ${soCount} 節社會課`); }
                 }
                 // Rule 4: Grade directors need specialist at Mon period 1
                 const htId = getHomeroomTeacherId(cid);
