@@ -1952,6 +1952,20 @@ createApp({
                 ['二', 3], ['一', 3], ['三', 3], ['四', 3], ['五', 3],
             ];
         }
+        // 這位老師這一天，已經在「這個年級」的班上教了幾節（不分哪一班），
+        // 用來讓自動排課優先把同一位老師同一天的課集中在同一個年級，方便老師備課
+        function getTeacherGradePeriodsOnDay(tid, day, grade) {
+            let count = 0;
+            for (const cid in scheduleData.value) {
+                if (parseInt(cid.charAt(0)) !== grade) continue;
+                const dayData = scheduleData.value[cid][day];
+                if (!dayData) continue;
+                for (const p in dayData) {
+                    if (dayData[p]?.teacherId == tid) count++;
+                }
+            }
+            return count;
+        }
 
         const preAutoFillSnapshot = ref(null);
         // 復原到「上一次按下一鍵排入科任課」之前的狀態——只會把那次自動排課排的課拿掉，
@@ -1988,7 +2002,12 @@ createApp({
             tasks.sort((a, b) => {
                 const pA = teachers.value.find(t => t.id === a.tid)?.priority ?? 10;
                 const pB = teachers.value.find(t => t.id === b.tid)?.priority ?? 10;
-                return pA !== pB ? pA - pB : b.count - a.count;
+                if (pA !== pB) return pA - pB;
+                // 權重相同時，同一位老師的任務盡量排在一起、同一位老師裡再按年級排在一起，
+                // 這樣接連處理時比較容易湊出「同一天教同一個年級」的結果（方便老師備課）
+                if (a.tid !== b.tid) return a.tid - b.tid;
+                if (a.grade !== b.grade) return a.grade - b.grade;
+                return b.count - a.count;
             });
             let placedCount = 0;
             const leftovers = [];
@@ -2014,7 +2033,14 @@ createApp({
                         if (tryPlace(task.cid, d, p, task.subj, task.tid)) { needed--; placedCount++; }
                     }
                 } else {
-                    for (const d of days) {
+                    // 中高年級：優先挑「這位老師今天已經教過同一個年級」的那幾天，
+                    // 方便老師同一天備同一個年級的課、不用每節換不同年級（軟性偏好，其他規則優先）
+                    const dayOrder = shuffleArray(days).sort((a, b) => {
+                        const aHas = getTeacherGradePeriodsOnDay(task.tid, a, task.grade) > 0 ? 0 : 1;
+                        const bHas = getTeacherGradePeriodsOnDay(task.tid, b, task.grade) > 0 ? 0 : 1;
+                        return aHas - bHas;
+                    });
+                    for (const d of dayOrder) {
                         if (needed <= 0) break;
                         if (d === excludeDay) continue; // 連堂那天已經排滿了，剩下的節數排到別天，確保是「兩天」
                         for (const p of periods) {
