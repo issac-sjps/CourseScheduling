@@ -799,7 +799,8 @@
                         已排 {{ getPlacedCount(selectedTeacherId) }} / 應排 {{ getTotalAssigned(selectedTeacherId) }} 節
                     </span>
                     <div class="ml-auto flex gap-2 items-center">
-                        <button @click="clearAllSchedule" class="btn btn-red">🗑️ 清空</button>
+                        <button v-if="preAutoFillSnapshot" @click="undoLastAutoFill" class="btn btn-orange" title="只移除上次一鍵排入科任課排的內容，之前排好的課不受影響">↩️ 復原上次自動排課</button>
+                        <button @click="clearAllSchedule" class="btn btn-red">🗑️ 清空全校</button>
                         <div class="flex items-center gap-2 bg-gray-100 rounded p-1 border">
                             <div class="w-3 h-3 rounded-full" :class="isAssignmentReady ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'"></div>
                             <button @click="runGlobalAutoFill" class="btn btn-purple shadow"
@@ -1838,7 +1839,7 @@ createApp({
         }
 
         function clearAllSchedule() {
-            if (confirm('確定清空所有排課資料？')) {
+            if (confirm('⚠️ 這會清空「全校」所有班級、所有老師已經排好的課表（包含06.班級預排課、07.科任預排課排過的所有內容），不是只清這個老師的，也不是只清自動排課的結果。\n\n確定要繼續嗎？此動作無法復原！')) {
                 scheduleData.value = {};
                 saveData();
             }
@@ -1952,8 +1953,21 @@ createApp({
             ];
         }
 
+        const preAutoFillSnapshot = ref(null);
+        // 復原到「上一次按下一鍵排入科任課」之前的狀態——只會把那次自動排課排的課拿掉，
+        // 在那之前（不管是手動排的還是更早排的）都不會受影響。只在記憶體裡暫存，
+        // 重新整理頁面或換頁重登入之後就會失效，無法復原。
+        function undoLastAutoFill() {
+            if (!preAutoFillSnapshot.value) { alert('目前沒有可以復原的「一鍵排入科任課」紀錄（可能還沒執行過，或頁面已經重新整理過）。'); return; }
+            if (!confirm('確定要復原到「上一次按下一鍵排入科任課」之前的狀態嗎？\n\n這次自動排課排的所有課都會被移除，但這之前已經排好的課（不管手動排的還是更早排的）不會受影響。')) return;
+            scheduleData.value = preAutoFillSnapshot.value;
+            preAutoFillSnapshot.value = null;
+            saveData();
+            alert('✅ 已復原到上次一鍵排課前的狀態。');
+        }
         function runGlobalAutoFill() {
             if (!confirm('確定執行「全校科任自動排課」？')) return;
+            preAutoFillSnapshot.value = JSON.parse(JSON.stringify(scheduleData.value)); // 排課前先存一份快照，供之後復原用
             let tasks = [];
             for (const cid in assignments.value) {
                 const htId  = getHomeroomTeacherId(cid);
@@ -2743,7 +2757,7 @@ createApp({
             getCellDisplay, handleClassCellClick, handleTeacherCellClick,
             saveCell, saveTeacherScheduleCell, deleteCell, clearAllSchedule,
             addSpecialRule, refreshSpecialStatus,
-            runGlobalAutoFill, runRuleValidation,
+            runGlobalAutoFill, runRuleValidation, preAutoFillSnapshot, undoLastAutoFill,
             addTeacher, renumberTeacherIds, regenerateTeachers, resetAllData,
             dragTeacherIdx, dragOverTeacherIdx, onTeacherDragStart, onTeacherDragOver, onTeacherDrop, onTeacherDragEnd,
             exportTeacherCSV, importTeacherCSV,
