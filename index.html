@@ -1130,6 +1130,7 @@ createApp({
             { id:7, name:'導師課不連續3節', desc:'導師本人教的課不能連續排3節以上（上午/下午分開算，午休不算連續）', status:'pending', logs:[] },
             { id:8, name:'課表節數缺漏',    desc:'找出每班每科目「應排節數」還沒排完的（不含排超過，排超過在班級預排課會即時提醒）', status:'pending', logs:[] },
             { id:9, name:'英語/世界之窗同天', desc:'同一班「英語」跟「世界之窗」（同一位老師教）不應排在同一天', status:'pending', logs:[] },
+            { id:10, name:'科任堂數每日上限', desc:'半天(4節)的班級每天最多2節科任課、全天(7節)最多4節科任課', status:'pending', logs:[] },
         ]);
 
         // ── 2. PURE HELPERS ──────────────────────────────────────
@@ -1277,6 +1278,9 @@ createApp({
             if (!cid) return [];
             const issues = [];
             days.forEach(d => {
+                const cap = getSpecialistCapForDay(cid, d);
+                const actual = getSpecialistPeriodCountForDay(cid, d);
+                if (cap > 0 && actual > cap) issues.push(`週${d}（${cap === 2 ? '半天' : '全天'}）排了 ${actual} 節科任課，超過上限 ${cap} 節`);
                 const dayData = scheduleData.value[cid]?.[d];
                 if (!dayData) return;
                 const cells = Object.values(dayData);
@@ -1728,7 +1732,24 @@ createApp({
 
         // ── 8. AUTO FILL ──────────────────────────────────────────
         // 純檢查（不寫入），供 tryPlace 跟「自然課連堂」專用排課共用，避免重複判斷邏輯
-        function canPlaceSlot(cid, day, period, subj, tid) {
+        // 這個班這一天總共有幾節課（扣掉全校/該年級結構性不上課的節次，例如週三下午、低年級半天）
+        function getDayPeriodCapacity(cid, day) {
+            return periods.filter(p => !isSystemBlocked(cid, day, p.idx)).length;
+        }
+        // 半天(4節)最多2節科任、全天(7節)最多4節科任
+        function getSpecialistCapForDay(cid, day) {
+            const cap = getDayPeriodCapacity(cid, day);
+            if (cap <= 0) return 0;
+            return cap <= 4 ? 2 : 4;
+        }
+        // 這個班這一天目前已經排了幾節「科任課」（教的人不是導師本人）
+        function getSpecialistPeriodCountForDay(cid, day) {
+            const htId = getHomeroomTeacherId(cid);
+            const dayData = scheduleData.value[cid]?.[day];
+            if (!dayData) return 0;
+            return Object.values(dayData).filter(cell => cell && cell.teacherId && cell.teacherId != htId).length;
+        }
+        function canPlaceSlot(cid, day, period, subj, tid, ignoreDailyCap) {
             if (scheduleData.value[cid]?.[day]?.[period]) return false;
             const t = teachers.value.find(x => x.id == tid);
             if (t?.constraints?.includes(`${day}-${period}`)) return false;
@@ -1743,6 +1764,14 @@ createApp({
                 const dayData = scheduleData.value[cid]?.[day];
                 if (dayData && Object.values(dayData).some(cell => cell?.subject === '英語' || cell?.subject === '世界之窗')) return false;
             }
+            // 半天(4節)每天最多2節科任、全天(7節)每天最多4節科任，超過就不給排（讓外層排課邏輯自然換下一天）
+            if (!ignoreDailyCap) {
+                const htId = getHomeroomTeacherId(cid);
+                if (tid != htId) {
+                    const cap = getSpecialistCapForDay(cid, day);
+                    if (getSpecialistPeriodCountForDay(cid, day) >= cap) return false;
+                }
+            }
             for (const other in scheduleData.value) {
                 if (scheduleData.value[other]?.[day]?.[period]?.teacherId == tid) return false;
             }
@@ -1753,10 +1782,19 @@ createApp({
             if (!scheduleData.value[cid][day]) scheduleData.value[cid][day] = {};
             scheduleData.value[cid][day][period] = { type: 'course', subject: subj, teacherId: tid };
         }
-        function tryPlace(cid, day, period, subj, tid) {
-            if (!canPlaceSlot(cid, day, period, subj, tid)) return false;
+        function tryPlace(cid, day, period, subj, tid, ignoreDailyCap) {
+            if (!canPlaceSlot(cid, day, period, subj, tid, ignoreDailyCap)) return false;
             placeCell(cid, day, period, subj, tid);
             return true;
+        }
+        // 洗牌用（抽籤排課用）
+        function shuffleArray(arr) {
+            const a = arr.slice();
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
         }
         // 自然課專用：優先找「同一天、同一時段區塊（上午1-4節 或 下午5-7節）內連續兩節」都空的地方，
         // 一次排進2節，回傳用掉的那一天，讓外層排課時把剩下1節排到別天，湊出「一天2節連堂＋一天1節」的模式。
@@ -1802,6 +1840,7 @@ createApp({
                 return pA !== pB ? pA - pB : b.count - a.count;
             });
             let placedCount = 0;
+            const leftovers = [];
             tasks.forEach(task => {
                 let needed = task.count;
                 for (const d of days) {
@@ -1824,9 +1863,27 @@ createApp({
                         if (tryPlace(task.cid, d, p.idx, task.subj, task.tid)) { needed--; placedCount++; }
                     }
                 }
+                if (needed > 0) leftovers.push({ ...task, needed }); // 每天科任堂數上限排滿了，剩下的先記下來
+            });
+            // 第二輪：真的排不進去的（卡在每天科任堂數上限），改用「隨機抽天、隨機抽節」硬塞進去。
+            // 其他排課規則（衝堂、禁排時段、體育/英語同天）還是會遵守，只放寬「每天科任堂數上限」這一條。
+            let forcedCount = 0;
+            leftovers.forEach(task => {
+                let needed = task.needed;
+                const shuffledDays = shuffleArray(days);
+                for (const d of shuffledDays) {
+                    if (needed <= 0) break;
+                    const shuffledPeriods = shuffleArray(periods);
+                    for (const p of shuffledPeriods) {
+                        if (needed <= 0) break;
+                        if (tryPlace(task.cid, d, p.idx, task.subj, task.tid, true)) { needed--; placedCount++; forcedCount++; }
+                    }
+                }
             });
             saveData();
-            alert(`✅ 排課完成！共排入 ${placedCount} 節科任課。`);
+            let msg = `✅ 排課完成！共排入 ${placedCount} 節科任課。`;
+            if (forcedCount > 0) msg += `\n\n⚠️ 其中有 ${forcedCount} 節因為「每天科任堂數上限」已經排滿，改用隨機抽天的方式硬排進去，建議去班級預排課或規則檢查確認一下這幾節有沒有問題。`;
+            alert(msg);
         }
 
         // ── 9. RULE VALIDATION ───────────────────────────────────
@@ -1862,6 +1919,17 @@ createApp({
                     const hasEng   = cells.some(c => c?.subject === '英語');
                     const hasWorld = cells.some(c => c?.subject === '世界之窗');
                     if (hasEng && hasWorld) { rule9.status = 'fail'; rule9.logs.push(`${cid} 週${d} 英語跟世界之窗同一天都有課`); }
+                }
+                // Rule 10: 科任堂數每日上限（半天最多2節、全天最多4節）
+                const rule10 = systemRules.value.find(r => r.id === 10);
+                for (const d of days) {
+                    const cap = getSpecialistCapForDay(cid, d);
+                    if (cap <= 0) continue;
+                    const actual = getSpecialistPeriodCountForDay(cid, d);
+                    if (actual > cap) {
+                        rule10.status = 'fail';
+                        rule10.logs.push(`${cid} 週${d}（${cap === 2 ? '半天' : '全天'}）排了 ${actual} 節科任課，超過上限 ${cap} 節`);
+                    }
                 }
                 // Rule 4: Grade directors need specialist at Mon period 1
                 const htId = getHomeroomTeacherId(cid);
