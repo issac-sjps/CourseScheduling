@@ -990,14 +990,19 @@
                 <div class="border-t pt-2 mt-2">
                     <label class="block text-xs font-bold mb-2">排入課程 (顯示剩餘節數)</label>
                     <select v-model="modalData.selectedTask" class="w-full border p-2 mb-2 rounded font-bold" size="5">
-                        <option v-for="task in modalData.availableTasks" :value="task" class="py-1"
-                            :disabled="isTaskSlotConflict(task, modalData.d, modalData.p, modalData.teacherId)">
+                        <option v-for="task in modalData.availableTasks" :value="task" class="py-1">
                             {{ task.name }} {{ task.subj }} (剩 {{ task.remaining }} 節){{ isTaskSlotConflict(task, modalData.d, modalData.p, modalData.teacherId) ? ' ⚠衝堂' : '' }}
                         </option>
                     </select>
+                    <div v-if="modalData.selectedTask && isTaskSlotConflict(modalData.selectedTask, modalData.d, modalData.p, modalData.teacherId)"
+                        class="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2 mb-2">
+                        ⚠️ 這格已經有別的課了，沒辦法直接排入。可以試試「🔄 嘗試自動調換」，系統會嘗試把原本那堂課挪到別的空堂，再把這堂課排進來（找不到空位就會告訴你，不會硬排）。
+                    </div>
                     <div class="flex gap-2">
-                        <button @click="saveTeacherScheduleCell('course')" class="flex-1 btn btn-blue"
+                        <button v-if="!modalData.selectedTask || !isTaskSlotConflict(modalData.selectedTask, modalData.d, modalData.p, modalData.teacherId)"
+                            @click="saveTeacherScheduleCell('course')" class="flex-1 btn btn-blue"
                             :disabled="!modalData.selectedTask" :class="{'btn-disabled': !modalData.selectedTask}">✅ 排入</button>
+                        <button v-else @click="attemptAutoSwap" class="flex-1 btn btn-orange">🔄 嘗試自動調換</button>
                         <button @click="saveTeacherScheduleCell('block')" class="flex-1 btn btn-red">⛔ 不排</button>
                     </div>
                     <div class="mt-2 text-right">
@@ -1132,7 +1137,7 @@ createApp({
             { id:9, name:'英語/世界之窗同天', desc:'同一班「英語」跟「世界之窗」（同一位老師教）不應排在同一天', status:'pending', logs:[] },
             { id:10, name:'科任堂數每日上限', desc:'半天(4節)最多2節科任課、全天最多4節科任課（一、二年級全天降為3節）', status:'pending', logs:[] },
             { id:11, name:'社會課不連堂',    desc:'同一天同一班不應有兩節社會',      status:'pending', logs:[] },
-            { id:12, name:'低年級避開第4節', desc:'一、二年級科任課不排在第4節',      status:'pending', logs:[] },
+            { id:12, name:'低年級避開第1、4節', desc:'一、二年級科任課不排在第1、4節，盡量排第2、3節', status:'pending', logs:[] },
         ]);
 
         // ── 2. PURE HELPERS ──────────────────────────────────────
@@ -1295,8 +1300,10 @@ createApp({
                 if (hasEng && hasWorld) issues.push(`週${d} 「英語」跟「世界之窗」都排在同一天（同一位老師教），建議分開`);
                 if (parseInt(cid.charAt(0)) <= 2) {
                     const htId = getHomeroomTeacherId(cid);
-                    const cell4 = dayData[4];
-                    if (cell4 && cell4.teacherId && cell4.teacherId != htId) issues.push(`週${d}第4節 排了科任課（${cell4.subject}），一、二年級科任課不排第4節`);
+                    [1, 4].forEach(p => {
+                        const cell = dayData[p];
+                        if (cell && cell.teacherId && cell.teacherId != htId) issues.push(`週${d}第${p}節 排了科任課（${cell.subject}），一、二年級科任課不排第1、4節`);
+                    });
                 }
             });
             const natureIssue = checkNatureRule(cid);
@@ -1680,6 +1687,40 @@ createApp({
             else t.constraints.push(k);
             saveData();
         }
+        // 嘗試自動調換：這格已經被別的課佔用時，試著把「原本佔用的那堂課」搬到同一班別的空堂，
+        // 騰出這格給要排的新課。只做「搬動一次」，如果原本那堂課找不到任何可以搬去的空位，就老實回報失敗，
+        // 不會硬排、也不會為了騰位子去連鎖搬動更多課。
+        function attemptAutoSwap() {
+            const { d, p, teacherId, selectedTask } = modalData.value;
+            if (!selectedTask) return;
+            const cid = selectedTask.cid;
+            const existing = scheduleData.value[cid]?.[d]?.[p];
+            if (!existing) { alert('這格目前是空的，直接按「✅ 排入」就可以了。'); return; }
+            if (existing.teacherId == teacherId) { alert('這堂課本來就是同一位老師教的，不需要調換，直接排入就好。'); return; }
+            const blockerSubj = existing.subject;
+            const blockerTid  = existing.teacherId;
+            let moved = null;
+            for (const d2 of days) {
+                for (const p2 of periods) {
+                    if (d2 === d && p2.idx === p) continue;
+                    if (canPlaceSlot(cid, d2, p2.idx, blockerSubj, blockerTid)) { moved = { day: d2, period: p2.idx }; break; }
+                }
+                if (moved) break;
+            }
+            if (!moved) {
+                alert(`⚠️ 自動調換失敗：找不到空位可以搬動「${blockerSubj}」這堂課，這格目前卡死了，需要你手動處理。`);
+                return;
+            }
+            // 先清空原本格子（Vue 響應式安全刪除），把被卡住的課搬到新位置，再把新課排進來
+            const dayData = { ...scheduleData.value[cid][d] };
+            delete dayData[p];
+            scheduleData.value[cid][d] = dayData;
+            placeCell(cid, moved.day, moved.period, blockerSubj, blockerTid);
+            placeCell(cid, d, p, selectedTask.subj, teacherId);
+            showModal.value = false;
+            saveData();
+            alert(`✅ 已自動調換完成！原本的「${blockerSubj}」課已搬到週${moved.day}第${moved.period}節，新課已排入。`);
+        }
         function saveTeacherScheduleCell(action) {
             const { d, p, teacherId, selectedTask, occupiedClassId } = modalData.value;
             const t = teachers.value.find(x => x.id == teacherId);
@@ -1766,8 +1807,8 @@ createApp({
             if (t?.constraints?.includes(`${day}-${period}`)) return false;
             if (isSpecialBlocked(cid, day, period)) return false;
             if (isSystemBlocked(cid, day, period)) return false;
-            // 一、二年級科任課不排第4節（不管哪一天）
-            if (parseInt(cid.charAt(0)) <= 2 && period === 4) {
+            // 一、二年級科任課不排第1、4節（不管哪一天），盡量排第2、3節
+            if (parseInt(cid.charAt(0)) <= 2 && (period === 1 || period === 4)) {
                 const htId = getHomeroomTeacherId(cid);
                 if (tid != htId) return false;
             }
@@ -1964,14 +2005,16 @@ createApp({
                 // Rule 4: Grade directors need specialist at Mon period 1
                 const htId = getHomeroomTeacherId(cid);
                 const ht = teachers.value.find(t => t.id == htId);
-                // Rule 12: 一、二年級科任課不排第4節
+                // Rule 12: 一、二年級科任課不排第1、4節
                 if (parseInt(cid.charAt(0)) <= 2) {
                     const rule12 = systemRules.value.find(r => r.id === 12);
                     for (const d of days) {
-                        const cell = scheduleData.value[cid][d]?.[4];
-                        if (cell && cell.teacherId && cell.teacherId != htId) {
-                            rule12.status = 'fail';
-                            rule12.logs.push(`${cid} 週${d}第4節 排了科任課（${cell.subject}）`);
+                        for (const p of [1, 4]) {
+                            const cell = scheduleData.value[cid][d]?.[p];
+                            if (cell && cell.teacherId && cell.teacherId != htId) {
+                                rule12.status = 'fail';
+                                rule12.logs.push(`${cid} 週${d}第${p}節 排了科任課（${cell.subject}）`);
+                            }
                         }
                     }
                 }
@@ -2560,7 +2603,7 @@ createApp({
         return {
             currentTab, currentWorkspace, workspaces, tabs, workspaceTabs, selectWorkspace, assignMode, days, periods, subjects,
             teachers, gradeConfig, scheduleData, specialRules, newRule, parseClassRangeInput,
-            editingRuleIndex, startEditRule, cancelEditRule, classSubjectStatus, isTaskSlotConflict, quickToggleBlock, classDayIssues,
+            editingRuleIndex, startEditRule, cancelEditRule, classSubjectStatus, isTaskSlotConflict, quickToggleBlock, classDayIssues, attemptAutoSwap,
             selectedClass, selectedTeacherId, queryMode, queryTarget,
             showModal, modalData, statsFilter, batchSubject, batchTeacherId,
             quickRows, quickApplySummary, addQuickRow, removeQuickRow, applyQuickRow, applyAllQuickRows, clearQuickRows, previewQuickRow,
