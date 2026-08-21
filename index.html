@@ -597,6 +597,17 @@
                     <button class="btn btn-blue" @click="refreshSpecialStatus">刷新偵測</button>
                 </div>
                 <div class="flex gap-2 mb-4 items-end bg-orange-50 p-3 rounded flex-wrap">
+                    <div>
+                        <label class="block font-bold text-xs mb-1">模式</label>
+                        <div class="flex gap-1">
+                            <label class="flex items-center gap-1 border rounded px-2 py-1 text-xs cursor-pointer"
+                                :class="newRule.mode === 'avoid' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white'"
+                                @click="newRule.mode = 'avoid'">🚫禁止科任</label>
+                            <label class="flex items-center gap-1 border rounded px-2 py-1 text-xs cursor-pointer"
+                                :class="newRule.mode === 'require' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white'"
+                                @click="newRule.mode = 'require'">✅必須科任</label>
+                        </div>
+                    </div>
                     <div class="flex-1 min-w-[90px]"><label class="block font-bold text-xs mb-1">原因</label><input v-model="newRule.name" class="w-full border p-1 rounded text-sm" placeholder="例：客語課"></div>
                     <div class="flex-1 min-w-[220px]"><label class="block font-bold text-xs mb-1">班級（用「.」「,」或空白分隔，可用簡寫如 501-8）</label><input v-model="newRule.classes" class="w-full border p-1 rounded text-sm" placeholder="例：501-8.601-8"></div>
                     <div>
@@ -627,7 +638,11 @@
                     <div v-for="(rule, idx) in specialRules" :key="idx" class="bg-white border rounded p-3 flex justify-between items-center shadow-sm"
                         :class="{'ring-2 ring-orange-400': editingRuleIndex === idx}">
                         <div>
-                            <div class="font-bold text-gray-800">{{ rule.name }} <span class="text-xs bg-gray-200 px-2 rounded">{{ rule.day }}{{ rule.period }}</span></div>
+                            <div class="font-bold text-gray-800">
+                                {{ rule.name }}
+                                <span class="text-xs bg-gray-200 px-2 rounded">{{ rule.day }}{{ rule.period }}</span>
+                                <span class="text-xs px-2 rounded" :class="rule.mode === 'require' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'">{{ rule.mode === 'require' ? '✅必須科任' : '🚫禁止科任' }}</span>
+                            </div>
                             <div class="text-xs text-gray-500">{{ rule.classes.join(', ') }}</div>
                         </div>
                         <div class="flex gap-2">
@@ -721,7 +736,10 @@
                     <select v-model="selectedTeacherId" class="border p-1 rounded font-bold w-40">
                         <option v-for="t in specialistTeachers" :value="t.id">{{ t.name }}</option>
                     </select>
-                    <span class="text-xs text-gray-500 ml-2">已排 {{ getPlacedCount(selectedTeacherId) }} / 應排 {{ getTotalAssigned(selectedTeacherId) }} 節</span>
+                    <span class="text-xs ml-2 font-bold"
+                        :class="getPlacedCount(selectedTeacherId) >= getTotalAssigned(selectedTeacherId) && getTotalAssigned(selectedTeacherId) > 0 ? 'text-green-600' : 'text-red-500'">
+                        已排 {{ getPlacedCount(selectedTeacherId) }} / 應排 {{ getTotalAssigned(selectedTeacherId) }} 節
+                    </span>
                 </div>
                 <div class="space-y-2">
                     <div v-for="role in ['主任','組長','科任']" :key="role" class="flex items-start gap-2 border-b border-dashed pb-1">
@@ -731,7 +749,8 @@
                                 @click="selectedTeacherId = t.id" class="select-btn text-xs"
                                 :class="{'active': selectedTeacherId === t.id}">
                                 {{ t.name }}
-                                <span class="ml-1 opacity-60 text-[10px]">{{ getPlacedCount(t.id) }}/{{ getTotalAssigned(t.id) }}</span>
+                                <span class="ml-1 text-[10px] font-bold"
+                                    :class="selectedTeacherId === t.id ? 'opacity-90' : (getPlacedCount(t.id) >= getTotalAssigned(t.id) && getTotalAssigned(t.id) > 0 ? 'text-green-600' : 'text-red-500')">{{ getPlacedCount(t.id) }}/{{ getTotalAssigned(t.id) }}</span>
                             </button>
                         </div>
                     </div>
@@ -775,6 +794,10 @@
                     <select v-model="selectedTeacherId" class="border p-1 rounded font-bold w-40">
                         <option v-for="t in specialistTeachers" :value="t.id">{{ t.name }}</option>
                     </select>
+                    <span class="text-xs ml-2 font-bold"
+                        :class="getPlacedCount(selectedTeacherId) >= getTotalAssigned(selectedTeacherId) && getTotalAssigned(selectedTeacherId) > 0 ? 'text-green-600' : 'text-red-500'">
+                        已排 {{ getPlacedCount(selectedTeacherId) }} / 應排 {{ getTotalAssigned(selectedTeacherId) }} 節
+                    </span>
                     <div class="ml-auto flex gap-2 items-center">
                         <button @click="clearAllSchedule" class="btn btn-red">🗑️ 清空</button>
                         <div class="flex items-center gap-2 bg-gray-100 rounded p-1 border">
@@ -791,7 +814,11 @@
                         <div class="flex flex-wrap gap-1">
                             <button v-for="t in getTeachersByRoleGroup(role)" :key="t.id"
                                 @click="selectedTeacherId = t.id" class="select-btn"
-                                :class="{'active': selectedTeacherId === t.id}">{{ t.name }}</button>
+                                :class="{'active': selectedTeacherId === t.id}">
+                                {{ t.name }}
+                                <span class="ml-1 text-[10px] font-bold"
+                                    :class="selectedTeacherId === t.id ? 'opacity-90' : (getPlacedCount(t.id) >= getTotalAssigned(t.id) && getTotalAssigned(t.id) > 0 ? 'text-green-600' : 'text-red-500')">{{ getPlacedCount(t.id) }}/{{ getTotalAssigned(t.id) }}</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1110,7 +1137,7 @@ createApp({
         const remoteDocIds = { teachers: new Set(), assignments: new Set(), schedules: new Set() };
         let remoteRefreshTimer = null;
 
-        const newRule = ref({ name:'', classes:'', day:'二', periods: [] });
+        const newRule = ref({ name:'', classes:'', day:'二', periods: [], mode: 'avoid' });
         const statsFilter       = ref('all');
         const batchSubject      = ref('國語');
         const batchTeacherId    = ref(null);
@@ -1138,6 +1165,8 @@ createApp({
             { id:10, name:'科任堂數每日上限', desc:'半天(4節)最多2節科任課、全天最多4節科任課（一、二年級全天降為3節）', status:'pending', logs:[] },
             { id:11, name:'社會課不連堂',    desc:'同一天同一班不應有兩節社會',      status:'pending', logs:[] },
             { id:12, name:'低年級避開第1、4節', desc:'一、二年級科任課不排在第1、4節，盡量排第2、3節', status:'pending', logs:[] },
+            { id:13, name:'科任課不連續3節(中高年級)', desc:'3-6年級科任課不能連續排3節以上（上午/下午分開算，午休不算連續）', status:'pending', logs:[] },
+            { id:14, name:'指定科任時段',    desc:'04設定的「必須科任」時段，檢查目前是否真的排了科任課', status:'pending', logs:[] },
         ]);
 
         // ── 2. PURE HELPERS ──────────────────────────────────────
@@ -1279,6 +1308,34 @@ createApp({
             }
             return null;
         }
+        // 中高年級(3-6年級)：科任課、導師課都不能在同一時段區塊（上午1-4節、下午5-7節，不跨午休）
+        // 連續超過2節。回傳這個班所有違規的文字說明。
+        function findConsecutiveRunIssues(cid) {
+            const grade = parseInt(cid.charAt(0));
+            if (grade < 3) return []; // 低年級用另一套第1、4節規則，不適用這條
+            const issues = [];
+            const htId = getHomeroomTeacherId(cid);
+            const blocks = [{ label: '上午', periods: [1, 2, 3, 4] }, { label: '下午', periods: [5, 6, 7] }];
+            days.forEach(d => {
+                blocks.forEach(block => {
+                    let specStreak = 0, homeStreak = 0, maxSpec = 0, maxHome = 0;
+                    block.periods.forEach(p => {
+                        const cell = scheduleData.value[cid]?.[d]?.[p];
+                        if (cell && cell.teacherId) {
+                            if (cell.teacherId != htId) { specStreak++; homeStreak = 0; }
+                            else { homeStreak++; specStreak = 0; }
+                        } else {
+                            specStreak = 0; homeStreak = 0;
+                        }
+                        maxSpec = Math.max(maxSpec, specStreak);
+                        maxHome = Math.max(maxHome, homeStreak);
+                    });
+                    if (maxSpec >= 3) issues.push(`週${d}${block.label} 科任課連續 ${maxSpec} 節，超過上限2節`);
+                    if (maxHome >= 3) issues.push(`週${d}${block.label} 導師課連續 ${maxHome} 節，超過上限2節`);
+                });
+            });
+            return issues;
+        }
         // 這個班「同一天」相關的排課提醒：體育重複、英語/世界之窗同天、自然課連堂規則
         const classDayIssues = computed(() => {
             const cid = selectedClass.value;
@@ -1308,6 +1365,13 @@ createApp({
             });
             const natureIssue = checkNatureRule(cid);
             if (natureIssue) issues.push(natureIssue);
+            issues.push(...findConsecutiveRunIssues(cid));
+            specialRules.value.filter(r => r.mode === 'require' && r.classes.includes(cid)).forEach(r => {
+                const htId = getHomeroomTeacherId(cid);
+                const cell = scheduleData.value[cid]?.[r.day]?.[r.period];
+                const hasSpecialist = cell && cell.teacherId && cell.teacherId != htId;
+                if (!hasSpecialist) issues.push(`週${r.day}第${r.period}節（${r.name}）設定為必須科任，但目前沒有排科任課`);
+            });
             return issues;
         });
         const classSubjectStatus = computed(() => {
@@ -1587,7 +1651,7 @@ createApp({
             return false;
         }
         function isSpecialBlocked(cid, day, period) {
-            return specialRules.value.some(r => r.day == day && r.period == period && r.classes.includes(cid));
+            return specialRules.value.some(r => r.day == day && r.period == period && r.classes.includes(cid) && r.mode !== 'require');
         }
         function isTeacherBlocked(day, period) {
             const t = teachers.value.find(x => x.id == selectedTeacherId.value);
@@ -1876,6 +1940,17 @@ createApp({
             }
             return null;
         }
+        // 低年級（一、二年級）科任課的理想排課順序：先讓每一天（一~五）早上都排到1節，
+        // 接著排星期二下午1節（因為星期二是低年級唯一的全天），如果還有課排不完，
+        // 才依序加開星期二早上第2節、以及其他天早上第2節。這樣同一週的科任課才會平均分散，
+        // 不會像逐節塞滿一天再換下一天那樣，讓某一天被塞爆。
+        function getLowGradePrioritySlots() {
+            return [
+                ['一', 2], ['二', 2], ['三', 2], ['四', 2], ['五', 2],
+                ['二', 5], ['二', 6], ['二', 7],
+                ['二', 3], ['一', 3], ['三', 3], ['四', 3], ['五', 3],
+            ];
+        }
 
         function runGlobalAutoFill() {
             if (!confirm('確定執行「全校科任自動排課」？')) return;
@@ -1917,23 +1992,33 @@ createApp({
                     const usedDay = tryPlaceNatureDouble(task.cid, task.tid);
                     if (usedDay) { needed -= 2; excludeDay = usedDay; placedCount += 2; }
                 }
-                for (const d of days) {
-                    if (needed <= 0) break;
-                    if (d === excludeDay) continue; // 連堂那天已經排滿了，剩下的節數排到別天，確保是「兩天」
-                    for (const p of periods) {
+                if (task.grade <= 2) {
+                    // 低年級：用「每天先1節、星期二下午、星期二早上第2節」的優先順序排課，讓課程平均分散
+                    for (const [d, p] of getLowGradePrioritySlots()) {
                         if (needed <= 0) break;
-                        if (tryPlace(task.cid, d, p.idx, task.subj, task.tid)) { needed--; placedCount++; }
+                        if (d === excludeDay) continue;
+                        if (tryPlace(task.cid, d, p, task.subj, task.tid)) { needed--; placedCount++; }
+                    }
+                } else {
+                    for (const d of days) {
+                        if (needed <= 0) break;
+                        if (d === excludeDay) continue; // 連堂那天已經排滿了，剩下的節數排到別天，確保是「兩天」
+                        for (const p of periods) {
+                            if (needed <= 0) break;
+                            if (tryPlace(task.cid, d, p.idx, task.subj, task.tid)) { needed--; placedCount++; }
+                        }
                     }
                 }
                 if (needed > 0) leftovers.push({ ...task, needed }); // 每天科任堂數上限排滿了，剩下的先記下來
             });
-            // 第二輪：真的排不進去的（卡在每天科任堂數上限），改用「隨機抽天、隨機抽節」硬塞進去。
+            // 第二輪：真的排不進去的（卡在每天科任堂數上限），優先挑「目前科任課排最少」的那幾天塞進去
+            // （用洗牌只是讓同樣空堂數的天之間排序公平，不是完全隨機亂塞），真的沒有更好選擇才會硬排超過上限。
             // 其他排課規則（衝堂、禁排時段、體育/英語同天）還是會遵守，只放寬「每天科任堂數上限」這一條。
             let forcedCount = 0;
             leftovers.forEach(task => {
                 let needed = task.needed;
-                const shuffledDays = shuffleArray(days);
-                for (const d of shuffledDays) {
+                const sortedDays = shuffleArray(days).sort((a, b) => getSpecialistPeriodCountForDay(task.cid, a) - getSpecialistPeriodCountForDay(task.cid, b));
+                for (const d of sortedDays) {
                     if (needed <= 0) break;
                     const shuffledPeriods = shuffleArray(periods);
                     for (const p of shuffledPeriods) {
@@ -1944,7 +2029,7 @@ createApp({
             });
             saveData();
             let msg = `✅ 排課完成！共排入 ${placedCount} 節科任課。`;
-            if (forcedCount > 0) msg += `\n\n⚠️ 其中有 ${forcedCount} 節因為「每天科任堂數上限」已經排滿，改用隨機抽天的方式硬排進去，建議去班級預排課或規則檢查確認一下這幾節有沒有問題。`;
+            if (forcedCount > 0) msg += `\n\n⚠️ 其中有 ${forcedCount} 節因為「每天科任堂數上限」已經排滿，改用優先挑最空的那幾天硬排進去，建議去班級預排課或規則檢查確認一下這幾節有沒有問題。`;
             alert(msg);
         }
 
@@ -2051,6 +2136,23 @@ createApp({
                         const afternoonRun = countRun([5, 6, 7]);
                         if (morningRun >= 3)   { rule7.status = 'fail'; rule7.logs.push(`${cid} 週${d} 上午導師課連續 ${morningRun} 節`); }
                         if (afternoonRun >= 3) { rule7.status = 'fail'; rule7.logs.push(`${cid} 週${d} 下午導師課連續 ${afternoonRun} 節`); }
+                        // Rule 13: 3-6年級科任課不連續3節以上
+                        if (parseInt(cid.charAt(0)) >= 3) {
+                            const countSpecRun = (periodList) => {
+                                let cur = 0, maxRun = 0;
+                                periodList.forEach(p => {
+                                    const cell = scheduleData.value[cid]?.[d]?.[p];
+                                    if (cell && cell.teacherId && cell.teacherId != htId) { cur++; maxRun = Math.max(maxRun, cur); }
+                                    else cur = 0;
+                                });
+                                return maxRun;
+                            };
+                            const rule13 = systemRules.value.find(r => r.id === 13);
+                            const specMorningRun   = countSpecRun([1, 2, 3, 4]);
+                            const specAfternoonRun = countSpecRun([5, 6, 7]);
+                            if (specMorningRun >= 3)   { rule13.status = 'fail'; rule13.logs.push(`${cid} 週${d} 上午科任課連續 ${specMorningRun} 節`); }
+                            if (specAfternoonRun >= 3) { rule13.status = 'fail'; rule13.logs.push(`${cid} 週${d} 下午科任課連續 ${specAfternoonRun} 節`); }
+                        }
                     }
                 }
             }
@@ -2066,6 +2168,19 @@ createApp({
                     if (placed < target) {
                         rule8.status = 'fail';
                         rule8.logs.push(`${cls.id} ${s.zh}：課表已排 ${placed}/${target} 節，還少 ${target - placed} 節`);
+                    }
+                });
+            });
+            // Rule 14: 04設定的「必須科任」時段，檢查那節目前是不是真的有科任課
+            const rule14 = systemRules.value.find(r => r.id === 14);
+            specialRules.value.filter(r => r.mode === 'require').forEach(r => {
+                r.classes.forEach(cid => {
+                    const htId = getHomeroomTeacherId(cid);
+                    const cell = scheduleData.value[cid]?.[r.day]?.[r.period];
+                    const hasSpecialist = cell && cell.teacherId && cell.teacherId != htId;
+                    if (!hasSpecialist) {
+                        rule14.status = 'fail';
+                        rule14.logs.push(`${cid} 週${r.day}第${r.period}節（${r.name}）目前沒有排科任課`);
                     }
                 });
             });
@@ -2137,9 +2252,10 @@ createApp({
                     classes,
                     day: newRule.value.day,
                     period: newRule.value.periods[0],
+                    mode: newRule.value.mode || 'avoid',
                 };
                 editingRuleIndex.value = null;
-                newRule.value = { name: '', classes: '', day: '二', periods: [] };
+                newRule.value = { name: '', classes: '', day: '二', periods: [], mode: 'avoid' };
             } else {
                 // 有勾選幾個節次，就新增幾筆規則（同一個原因/班級/星期，節次分開存）
                 newRule.value.periods.forEach(p => {
@@ -2148,20 +2264,21 @@ createApp({
                         classes,
                         day: newRule.value.day,
                         period: p,
+                        mode: newRule.value.mode || 'avoid',
                     });
                 });
-                newRule.value = { name: newRule.value.name, classes: newRule.value.classes, day: newRule.value.day, periods: [] };
+                newRule.value = { name: newRule.value.name, classes: newRule.value.classes, day: newRule.value.day, periods: [], mode: newRule.value.mode };
             }
             saveData();
         }
         function startEditRule(idx) {
             const rule = specialRules.value[idx];
-            newRule.value = { name: rule.name, classes: rule.classes.join('.'), day: rule.day, periods: [rule.period] };
+            newRule.value = { name: rule.name, classes: rule.classes.join('.'), day: rule.day, periods: [rule.period], mode: rule.mode || 'avoid' };
             editingRuleIndex.value = idx;
         }
         function cancelEditRule() {
             editingRuleIndex.value = null;
-            newRule.value = { name: '', classes: '', day: '二', periods: [] };
+            newRule.value = { name: '', classes: '', day: '二', periods: [], mode: 'avoid' };
         }
         function refreshSpecialStatus() { alert('偵測已刷新'); }
 
